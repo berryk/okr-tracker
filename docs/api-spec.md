@@ -1,7 +1,7 @@
 # OKR Tracker - API Specification
 
 > **Version**: 1.0.0  
-> **Base URL**: `https://okr.moodys.com/api`
+> **Base URL**: `https://okr.yourcompany.com/api`
 
 ---
 
@@ -36,7 +36,7 @@ SAML assertion consumer service.
   "success": true,
   "user": {
     "id": "uuid",
-    "email": "user@moodys.com",
+    "email": "user@example.com",
     "name": "John Doe",
     "role": "CONTRIBUTOR"
   }

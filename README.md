@@ -59,4 +59,4 @@ See [PLAN.md](./PLAN.md) for implementation details.
 
 ## License
 
-Proprietary - Moody's Analytics Internal Use
+MIT License - Open Source

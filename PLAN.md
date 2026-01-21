@@ -2,7 +2,7 @@
 
 > **Status**: DRAFT - Awaiting Review  
 > **Last Updated**: 2026-01-21  
-> **Target Users**: ~18,000 (Moody's Analytics)
+> **Target Users**: ~18,000 (enterprise scale)
 
 ---
 
@@ -24,7 +24,7 @@
 ## Executive Summary
 
 ### Problem Statement
-Moody's Analytics needs a scalable OKR tracking system that:
+Organizations need a scalable OKR tracking system that:
 - Enables strategic alignment from CEO to individual contributor
 - Supports ~18,000 users with real-time updates
 - Provides clear visibility into how individual goals connect to company objectives
@@ -725,9 +725,9 @@ mobile/
 ```typescript
 // config/okta.ts
 export const oktaConfig = {
-  issuer: 'https://moodys.okta.com/oauth2/default',
+  issuer: 'https://your-org.okta.com/oauth2/default',
   clientId: process.env.OKTA_CLIENT_ID,
-  redirectUri: 'https://okr.moodys.com/auth/callback',
+  redirectUri: 'https://okr.yourcompany.com/auth/callback',
   scopes: ['openid', 'profile', 'email', 'groups'],
   pkce: true
 };
@@ -792,7 +792,7 @@ export const oktaConfig = {
     {
       "type": "Action.OpenUrl",
       "title": "View Goal",
-      "url": "https://okr.moodys.com/goals/abc123"
+      "url": "https://okr.yourcompany.com/goals/abc123"
     },
     {
       "type": "Action.Submit",
