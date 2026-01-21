@@ -1,0 +1,125 @@
+version: '3.8'
+
+# Homelab deployment - self-contained, no AWS dependencies
+# Run: docker compose -f docker-compose.homelab.yml up -d
+
+services:
+  # ============ FRONTEND ============
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    environment:
+      - VITE_API_URL=http://localhost:4000
+      - VITE_AI_ENABLED=true
+    depends_on:
+      - backend
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.okr-frontend.rule=Host(`okr.8landridgeroad.com`)"
+      - "traefik.http.services.okr-frontend.loadbalancer.server.port=80"
+
+  # ============ BACKEND API ============
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://okr:okr_secure_password@db:5432/okr_tracker
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production-use-openssl-rand}
+      - SESSION_SECRET=${SESSION_SECRET:-another-secret-change-me}
+      # Demo auth (no Okta needed)
+      - AUTH_MODE=demo
+      - DEMO_USERS=true
+      # LLM - use Anthropic API directly (or set to 'mock' for no API)
+      - LLM_PROVIDER=${LLM_PROVIDER:-anthropic}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # Optional: OpenAI fallback
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      # Email (optional - set to 'console' to log emails instead of sending)
+      - EMAIL_PROVIDER=${EMAIL_PROVIDER:-console}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.okr-api.rule=Host(`okr.8landridgeroad.com`) && PathPrefix(`/api`)"
+      - "traefik.http.services.okr-api.loadbalancer.server.port=4000"
+
+  # ============ DATABASE ============
+  db:
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=okr
+      - POSTGRES_PASSWORD=okr_secure_password
+      - POSTGRES_DB=okr_tracker
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U okr -d okr_tracker"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ============ CACHE ============
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+
+  # ============ DATABASE ADMIN (optional) ============
+  adminer:
+    image: adminer:latest
+    ports:
+      - "8080:8080"
+    environment:
+      - ADMINER_DEFAULT_SERVER=db
+    depends_on:
+      - db
+    restart: unless-stopped
+    profiles:
+      - tools
+
+  # ============ SEED DATA JOB ============
+  seed:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: npm run db:seed
+    environment:
+      - DATABASE_URL=postgresql://okr:okr_secure_password@db:5432/okr_tracker
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles:
+      - setup
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  default:
+    name: okr-network
