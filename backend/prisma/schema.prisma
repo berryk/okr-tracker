@@ -1,0 +1,303 @@
+// OKR Tracker - Prisma Schema
+// Based on PLAN.md specification
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============ ORGANIZATION & USERS ============
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  settings  Json?    @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users User[]
+  teams Team[]
+}
+
+model User {
+  id             String    @id @default(uuid())
+  email          String    @unique
+  passwordHash   String?   // Null if SSO-only
+  firstName      String
+  lastName       String
+  title          String?
+  avatarUrl      String?
+  role           UserRole  @default(CONTRIBUTOR)
+  isActive       Boolean   @default(true)
+  lastLoginAt    DateTime?
+
+  organizationId String
+  teamId         String?
+  managerId      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  team         Team?        @relation(fields: [teamId], references: [id])
+  manager      User?        @relation("ManagerReports", fields: [managerId], references: [id])
+  directReports User[]      @relation("ManagerReports")
+
+  ownedGoals    Goal[]         @relation("GoalOwner")
+  goalUpdates   GoalUpdate[]
+  measureUpdates MeasureUpdate[]
+  aiInteractions AIInteraction[]
+  notifications Notification[]
+  notificationPreference NotificationPreference?
+}
+
+enum UserRole {
+  ADMIN
+  EXECUTIVE
+  MANAGER
+  CONTRIBUTOR
+}
+
+// ============ TEAMS ============
+
+model Team {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+  level       TeamLevel
+  parentId    String?
+  isActive    Boolean   @default(true)
+
+  organizationId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  parent       Team?        @relation("TeamHierarchy", fields: [parentId], references: [id])
+  children     Team[]       @relation("TeamHierarchy")
+
+  members User[]
+  goals   Goal[]
+}
+
+enum TeamLevel {
+  CORPORATE
+  EXECUTIVE
+  DEPARTMENT
+  TEAM
+  INDIVIDUAL
+}
+
+// ============ GOALS & MEASURES ============
+
+model Goal {
+  id           String     @id @default(uuid())
+  title        String
+  description  String?    @db.Text
+  quarter      String     // e.g., "Q1-2026"
+  year         Int
+  status       GoalStatus @default(DRAFT)
+  progress     Float      @default(0) // 0-100
+  isStretch    Boolean    @default(false)
+  dueDate      DateTime?
+
+  teamId  String
+  ownerId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  team    Team @relation(fields: [teamId], references: [id])
+  owner   User @relation("GoalOwner", fields: [ownerId], references: [id])
+
+  measures     Measure[]
+  updates      GoalUpdate[]
+  parentLinks  GoalLink[] @relation("ChildGoals")
+  childLinks   GoalLink[] @relation("ParentGoals")
+}
+
+enum GoalStatus {
+  DRAFT
+  ACTIVE
+  AT_RISK
+  BEHIND
+  ON_TRACK
+  COMPLETED
+  CANCELLED
+}
+
+model GoalLink {
+  id                  String @id @default(uuid())
+  parentGoalId        String
+  childGoalId         String
+  contributionWeight  Float  @default(1.0) // 0.0 - 1.0
+
+  createdAt DateTime @default(now())
+
+  parentGoal Goal @relation("ParentGoals", fields: [parentGoalId], references: [id], onDelete: Cascade)
+  childGoal  Goal @relation("ChildGoals", fields: [childGoalId], references: [id], onDelete: Cascade)
+
+  @@unique([parentGoalId, childGoalId])
+  @@index([parentGoalId])
+  @@index([childGoalId])
+}
+
+model GoalUpdate {
+  id        String   @id @default(uuid())
+  content   String   @db.Text
+  goalId    String
+  authorId  String
+  createdAt DateTime @default(now())
+
+  goal   Goal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  author User @relation(fields: [authorId], references: [id])
+
+  @@index([goalId])
+}
+
+// ============ MEASURES ============
+
+model Measure {
+  id           String      @id @default(uuid())
+  title        String
+  description  String?
+  measureType  MeasureType
+  unit         String?     // e.g., "$", "%", "count"
+  startValue   Float       @default(0)
+  currentValue Float       @default(0)
+  targetValue  Float
+  progress     Float       @default(0) // 0-100
+
+  goalId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  goal    Goal            @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  updates MeasureUpdate[]
+
+  @@index([goalId])
+}
+
+enum MeasureType {
+  INCREASE_TO    // Reach target value
+  DECREASE_TO    // Get down to target
+  MAINTAIN       // Keep at target
+  MILESTONE      // Binary: done or not
+}
+
+model MeasureUpdate {
+  id        String   @id @default(uuid())
+  value     Float
+  note      String?
+  measureId String
+  authorId  String
+  createdAt DateTime @default(now())
+
+  measure Measure @relation(fields: [measureId], references: [id], onDelete: Cascade)
+  author  User    @relation(fields: [authorId], references: [id])
+
+  @@index([measureId])
+}
+
+// ============ AI INTERACTIONS ============
+
+model AIInteraction {
+  id         String            @id @default(uuid())
+  userId     String
+  type       AIInteractionType
+  prompt     String            @db.Text
+  response   String            @db.Text
+  model      String            // e.g., "claude-3-sonnet"
+  tokens     Int               // Total tokens used
+  latencyMs  Int               // Response time
+  rating     Int?              // User feedback (1-5)
+  entityType String?           // e.g., "Goal", "Measure"
+  entityId   String?
+  createdAt  DateTime          @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+enum AIInteractionType {
+  GOAL_SUGGESTION
+  MEASURE_REVIEW
+  ALIGNMENT_SUGGESTION
+  PROGRESS_SUMMARY
+  CHAT_QUERY
+  RISK_DETECTION
+  REPORT_GENERATION
+}
+
+model AIInsight {
+  id          String   @id @default(uuid())
+  scope       String   // "user", "team", "corporate"
+  scopeId     String   // userId, teamId, or orgId
+  quarter     String
+  insightType String   // "risk", "achievement", "recommendation"
+  title       String
+  content     String   @db.Text
+  priority    Int      @default(0)
+  dismissed   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+
+  @@index([scope, scopeId])
+  @@index([quarter])
+}
+
+// ============ NOTIFICATIONS ============
+
+model NotificationPreference {
+  id                 String  @id @default(uuid())
+  userId             String  @unique
+  emailEnabled       Boolean @default(true)
+  teamsEnabled       Boolean @default(true)
+  pushEnabled        Boolean @default(true)
+  weeklyDigest       Boolean @default(true)
+  progressReminders  Boolean @default(true)
+  goalDeadlineAlerts Boolean @default(true)
+  aiInsightsEnabled  Boolean @default(true)
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String
+  data      Json?
+  read      Boolean          @default(false)
+  channels  String[]         // ["email", "teams", "push"]
+  sentAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, read])
+  @@index([createdAt])
+}
+
+enum NotificationType {
+  GOAL_ASSIGNED
+  PROGRESS_REMINDER
+  GOAL_AT_RISK
+  GOAL_COMPLETED
+  COMMENT_ADDED
+  WEEKLY_DIGEST
+  AI_INSIGHT
+  QUARTER_ENDING
+}
