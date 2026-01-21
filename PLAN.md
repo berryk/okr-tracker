@@ -9,12 +9,15 @@
 ## Table of Contents
 1. [Executive Summary](#executive-summary)
 2. [Technical Architecture](#technical-architecture)
-3. [Database Schema](#database-schema)
-4. [API Specification](#api-specification)
-5. [Implementation Phases](#implementation-phases)
-6. [Testing Strategy](#testing-strategy)
-7. [Deployment Plan](#deployment-plan)
-8. [Open Questions](#open-questions)
+3. [LLM Integration](#llm-integration)
+4. [Database Schema](#database-schema)
+5. [API Specification](#api-specification)
+6. [Mobile App](#mobile-app)
+7. [Integrations](#integrations)
+8. [Implementation Phases](#implementation-phases)
+9. [Testing Strategy](#testing-strategy)
+10. [AWS Deployment](#aws-deployment)
+11. [Resolved Questions](#resolved-questions)
 
 ---
 
@@ -26,14 +29,19 @@ Moody's Analytics needs a scalable OKR tracking system that:
 - Supports ~18,000 users with real-time updates
 - Provides clear visibility into how individual goals connect to company objectives
 - Tracks quarterly progress with quantifiable measures
+- Leverages AI to improve goal quality and provide intelligent insights
 
 ### Solution Overview
-A containerized web application with:
+A comprehensive OKR platform with:
 - **React SPA** frontend with hierarchical goal visualization
+- **React Native** mobile app for iOS and Android
 - **Node.js/Express** API backend with Redis caching
 - **PostgreSQL** database optimized for hierarchical queries
-- **SAML/SSO** integration for enterprise authentication
-- **Kubernetes** deployment for horizontal scaling
+- **Okta SSO** for enterprise authentication
+- **LLM Integration** (Claude/GPT-4) for AI-powered goal coaching
+- **Microsoft Teams** integration for notifications and quick actions
+- **Email notifications** via AWS SES
+- **AWS EKS** deployment for horizontal scaling
 
 ---
 
@@ -42,36 +50,35 @@ A containerized web application with:
 ### System Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              CDN (CloudFlare/AWS)                            │
-│                         Static assets, DDoS protection                       │
-└─────────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                              CloudFront CDN                                      │
+│                    Static assets, DDoS protection (AWS Shield)                   │
+└─────────────────────────────────────────────────────────────────────────────────┘
                                        │
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         Load Balancer (nginx/ALB)                            │
-│                        SSL termination, routing                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-                    │                                    │
-    ┌───────────────┴───────────────┐    ┌───────────────┴───────────────┐
-    │      Frontend Pods (3+)       │    │      Backend Pods (5+)        │
-    │   ┌─────────────────────┐     │    │   ┌─────────────────────┐     │
-    │   │ React SPA (nginx)   │     │    │   │  Express API        │     │
-    │   │ - Vite build        │     │    │   │  - REST endpoints   │     │
-    │   │ - Chakra UI         │     │    │   │  - WebSocket        │     │
-    │   │ - React Query       │     │    │   │  - Passport SAML    │     │
-    │   └─────────────────────┘     │    │   └─────────────────────┘     │
-    └───────────────────────────────┘    └───────────────────────────────┘
-                                                        │
-                    ┌───────────────────────────────────┼───────────────┐
-                    │                                   │               │
-    ┌───────────────┴───────────────┐    ┌─────────────┴─────┐    ┌────┴────┐
-    │        PostgreSQL 15          │    │   Redis Cluster   │    │   SSO   │
-    │  ┌──────────┬──────────┐      │    │  ┌─────────────┐  │    │ Provider│
-    │  │ Primary  │ Replica  │      │    │  │ Sessions    │  │    │ (Okta/  │
-    │  │          │ (read)   │      │    │  │ Cache       │  │    │ AzureAD)│
-    │  └──────────┴──────────┘      │    │  │ Pub/Sub     │  │    └─────────┘
-    │  + PgBouncer connection pool  │    │  └─────────────┘  │
-    └───────────────────────────────┘    └───────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                         Application Load Balancer (ALB)                          │
+│                        SSL termination, path-based routing                       │
+└─────────────────────────────────────────────────────────────────────────────────┘
+           │                    │                    │                    │
+    ┌──────┴──────┐      ┌──────┴──────┐      ┌──────┴──────┐      ┌──────┴──────┐
+    │  Frontend   │      │  Backend    │      │  LLM        │      │  Mobile     │
+    │  (React)    │      │  API        │      │  Service    │      │  API        │
+    │  EKS Pods   │      │  EKS Pods   │      │  EKS Pods   │      │  Gateway    │
+    └─────────────┘      └─────────────┘      └─────────────┘      └─────────────┘
+                                │                    │
+        ┌───────────────────────┼────────────────────┼────────────────────┐
+        │                       │                    │                    │
+  ┌─────┴─────┐          ┌──────┴──────┐      ┌──────┴──────┐      ┌──────┴──────┐
+  │  RDS      │          │ ElastiCache │      │   Bedrock   │      │    SES      │
+  │ PostgreSQL│          │   Redis     │      │   Claude    │      │   Email     │
+  │ Multi-AZ  │          │   Cluster   │      │   (or API)  │      │   Service   │
+  └───────────┘          └─────────────┘      └─────────────┘      └─────────────┘
+        │
+  ┌─────┴─────┐          ┌─────────────┐      ┌─────────────┐
+  │  RDS      │          │    Okta     │      │ MS Teams    │
+  │  Replica  │          │    SSO      │      │  Webhook    │
+  │  (read)   │          │             │      │  Bot        │
+  └───────────┘          └─────────────┘      └─────────────┘
 ```
 
 ### Frontend Architecture
@@ -85,57 +92,40 @@ frontend/
 │   │   ├── client.ts               # Axios instance with interceptors
 │   │   ├── goals.ts                # Goals API hooks
 │   │   ├── measures.ts             # Measures API hooks
-│   │   ├── users.ts                # Users API hooks
+│   │   ├── ai.ts                   # LLM API hooks
 │   │   └── teams.ts                # Teams API hooks
 │   ├── components/
 │   │   ├── common/                 # Shared UI components
-│   │   │   ├── Button.tsx
-│   │   │   ├── Card.tsx
-│   │   │   ├── Modal.tsx
-│   │   │   └── LoadingSpinner.tsx
 │   │   ├── goals/
-│   │   │   ├── GoalCard.tsx        # Individual goal display
-│   │   │   ├── GoalForm.tsx        # Create/edit goal
-│   │   │   ├── GoalTree.tsx        # Hierarchical tree view
-│   │   │   ├── GoalLink.tsx        # Link selector modal
-│   │   │   └── AlignmentView.tsx   # My goal → corporate alignment
+│   │   │   ├── GoalCard.tsx
+│   │   │   ├── GoalForm.tsx
+│   │   │   ├── GoalTree.tsx
+│   │   │   ├── AlignmentView.tsx
+│   │   │   └── AIGoalAssistant.tsx # LLM-powered suggestions
 │   │   ├── measures/
 │   │   │   ├── MeasureCard.tsx
 │   │   │   ├── MeasureForm.tsx
-│   │   │   ├── ProgressInput.tsx
-│   │   │   └── ProgressChart.tsx
-│   │   ├── dashboard/
-│   │   │   ├── ExecutiveDashboard.tsx
-│   │   │   ├── TeamDashboard.tsx
-│   │   │   └── MyDashboard.tsx
-│   │   └── layout/
-│   │       ├── Header.tsx
-│   │       ├── Sidebar.tsx
-│   │       └── PageLayout.tsx
+│   │   │   ├── ProgressChart.tsx
+│   │   │   └── AIMeasureReview.tsx # LLM measure analysis
+│   │   ├── ai/
+│   │   │   ├── AIChat.tsx          # Conversational AI interface
+│   │   │   ├── AISuggestions.tsx   # Inline suggestions
+│   │   │   ├── AIInsights.tsx      # Dashboard insights
+│   │   │   └── AICoach.tsx         # OKR coaching panel
+│   │   └── dashboard/
+│   │       ├── ExecutiveDashboard.tsx
+│   │       ├── TeamDashboard.tsx
+│   │       └── AIInsightsWidget.tsx
 │   ├── pages/
 │   │   ├── Home.tsx
 │   │   ├── Goals.tsx
-│   │   ├── MyGoals.tsx
-│   │   ├── TeamGoals.tsx
-│   │   ├── CorporateGoals.tsx
-│   │   ├── Reports.tsx
+│   │   ├── AIAssistant.tsx         # Dedicated AI page
 │   │   └── Settings.tsx
-│   ├── hooks/
-│   │   ├── useAuth.ts
-│   │   ├── useGoals.ts
-│   │   └── useRealtime.ts
-│   ├── context/
-│   │   ├── AuthContext.tsx
-│   │   └── ThemeContext.tsx
-│   ├── types/
-│   │   └── index.ts                # TypeScript interfaces
-│   └── utils/
-│       ├── formatting.ts
-│       └── validation.ts
-├── public/
+│   └── hooks/
+│       ├── useAuth.ts
+│       ├── useGoals.ts
+│       └── useAI.ts                # LLM interaction hooks
 ├── package.json
-├── tsconfig.json
-├── vite.config.ts
 └── Dockerfile
 ```
 
@@ -144,704 +134,947 @@ frontend/
 ```
 backend/
 ├── src/
-│   ├── index.ts                    # Server entry point
-│   ├── app.ts                      # Express app setup
+│   ├── index.ts
+│   ├── app.ts
 │   ├── config/
-│   │   ├── database.ts             # Prisma client
-│   │   ├── redis.ts                # Redis client
-│   │   ├── passport.ts             # SAML configuration
-│   │   └── env.ts                  # Environment variables
+│   │   ├── database.ts
+│   │   ├── redis.ts
+│   │   ├── okta.ts                 # Okta SAML/OIDC config
+│   │   ├── bedrock.ts              # AWS Bedrock config
+│   │   └── teams.ts                # MS Teams bot config
 │   ├── middleware/
-│   │   ├── auth.ts                 # JWT/session validation
-│   │   ├── rbac.ts                 # Role-based access control
-│   │   ├── rateLimit.ts            # API rate limiting
-│   │   ├── validation.ts           # Zod schema validation
-│   │   └── errorHandler.ts         # Global error handling
+│   │   ├── auth.ts
+│   │   ├── rbac.ts
+│   │   └── rateLimit.ts
 │   ├── routes/
-│   │   ├── index.ts                # Route aggregator
-│   │   ├── auth.routes.ts          # /api/auth/*
-│   │   ├── goals.routes.ts         # /api/goals/*
-│   │   ├── measures.routes.ts      # /api/measures/*
-│   │   ├── progress.routes.ts      # /api/progress/*
-│   │   ├── users.routes.ts         # /api/users/*
-│   │   ├── teams.routes.ts         # /api/teams/*
-│   │   └── reports.routes.ts       # /api/reports/*
-│   ├── controllers/
-│   │   ├── auth.controller.ts
-│   │   ├── goals.controller.ts
-│   │   ├── measures.controller.ts
-│   │   ├── progress.controller.ts
-│   │   ├── users.controller.ts
-│   │   ├── teams.controller.ts
-│   │   └── reports.controller.ts
+│   │   ├── auth.routes.ts
+│   │   ├── goals.routes.ts
+│   │   ├── ai.routes.ts            # LLM endpoints
+│   │   ├── notifications.routes.ts
+│   │   └── webhooks.routes.ts      # Teams webhooks
 │   ├── services/
-│   │   ├── goal.service.ts         # Goal business logic
-│   │   ├── measure.service.ts      # Measure business logic
-│   │   ├── alignment.service.ts    # Alignment calculations
-│   │   ├── cache.service.ts        # Redis caching layer
-│   │   └── notification.service.ts # Email/Slack notifications
-│   ├── repositories/
-│   │   ├── goal.repository.ts      # Goal data access
-│   │   ├── measure.repository.ts
-│   │   ├── user.repository.ts
-│   │   └── team.repository.ts
-│   ├── schemas/
-│   │   ├── goal.schema.ts          # Zod validation schemas
-│   │   ├── measure.schema.ts
-│   │   └── user.schema.ts
+│   │   ├── goal.service.ts
+│   │   ├── ai/
+│   │   │   ├── llm.service.ts      # LLM abstraction layer
+│   │   │   ├── goal-coach.service.ts
+│   │   │   ├── measure-analyzer.service.ts
+│   │   │   ├── insights.service.ts
+│   │   │   └── prompts/            # Prompt templates
+│   │   │       ├── goal-suggestions.ts
+│   │   │       ├── measure-review.ts
+│   │   │       ├── alignment-advice.ts
+│   │   │       └── progress-summary.ts
+│   │   ├── notification/
+│   │   │   ├── email.service.ts    # AWS SES
+│   │   │   ├── teams.service.ts    # MS Teams
+│   │   │   └── push.service.ts     # Mobile push
+│   │   └── cache.service.ts
 │   └── types/
-│       └── index.ts
 ├── prisma/
-│   ├── schema.prisma               # Database schema
-│   └── migrations/                 # Migration files
-├── package.json
-├── tsconfig.json
+│   └── schema.prisma
 └── Dockerfile
 ```
 
-### State Management (Frontend)
+---
 
-- **React Query (TanStack Query)** for server state
-  - Automatic caching with stale-while-revalidate
-  - Background refetching
-  - Optimistic updates for goal changes
-- **React Context** for client state
-  - Auth context (user session)
-  - Theme context (dark/light mode)
-- **URL State** for navigation
-  - React Router for page navigation
-  - Query params for filters/search
+## LLM Integration
 
-### Caching Strategy (Redis)
+### Overview
+The LLM integration provides AI-powered assistance throughout the OKR lifecycle, helping users write better goals, choose meaningful measures, and gain insights from their data.
+
+### LLM Provider Strategy
+- **Primary**: AWS Bedrock (Claude 3.5 Sonnet) - enterprise compliance, data residency
+- **Fallback**: Anthropic API (Claude) or OpenAI (GPT-4)
+- **Abstraction layer** allows swapping providers without code changes
+
+### Use Cases
+
+#### 1. Goal Writing Assistant 🎯
+**When**: User creates or edits a goal
+**How**: Real-time suggestions as user types
+
+```typescript
+// Example prompt
+const goalAssistantPrompt = `
+You are an OKR coach helping write effective objectives.
+The user is in: ${teamName} (${teamLevel} level)
+Parent goals they could align to:
+${parentGoals.map(g => `- ${g.title}`).join('\n')}
+
+Their draft goal: "${userInput}"
+
+Provide:
+1. Improved version (clearer, more inspiring, action-oriented)
+2. Why the changes help
+3. Suggested parent goal to link to
+4. 3 example key results/measures
+`;
+```
+
+**UI**: Inline suggestion panel next to goal form
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Create Goal                                                  │
+├─────────────────────────────────────────────────────────────┤
+│ Title: [Improve customer satisfaction          ]            │
+│                                                              │
+│ ┌─────────────────────────────────────────────────────────┐ │
+│ │ 💡 AI Suggestion                                        │ │
+│ │                                                         │ │
+│ │ Try: "Achieve industry-leading customer satisfaction    │ │
+│ │ scores in Q1 2026"                                      │ │
+│ │                                                         │ │
+│ │ ✓ More specific and measurable                         │ │
+│ │ ✓ Time-bound                                           │ │
+│ │                                                         │ │
+│ │ Suggested measures:                                     │ │
+│ │ • NPS score ≥ 70                                       │ │
+│ │ • CSAT ≥ 4.5/5                                         │ │
+│ │ • Support ticket resolution < 4 hours                  │ │
+│ │                                                         │ │
+│ │ [Apply Suggestion] [Dismiss]                           │ │
+│ └─────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### 2. Measure Quality Review 📊
+**When**: User adds measures to a goal
+**How**: Automatic analysis after measure is saved
+
+```typescript
+const measureReviewPrompt = `
+Review this OKR measure for quality:
+
+Goal: "${goal.title}"
+Measure: "${measure.title}"
+Target: ${measure.targetValue} ${measure.unit}
+Type: ${measure.measureType}
+
+Evaluate against SMART criteria:
+- Specific: Is it clear what's being measured?
+- Measurable: Can progress be objectively tracked?
+- Achievable: Is the target realistic?
+- Relevant: Does it actually indicate goal success?
+- Time-bound: Is there a clear deadline?
+
+Also check:
+- Is this a leading or lagging indicator?
+- Could this metric be gamed?
+- What might this miss?
+
+Provide a score (1-10) and specific improvement suggestions.
+`;
+```
+
+**Output Example**:
+```json
+{
+  "score": 7,
+  "assessment": {
+    "specific": { "score": 8, "note": "Clear metric" },
+    "measurable": { "score": 9, "note": "Easily tracked" },
+    "achievable": { "score": 5, "note": "20% increase may be aggressive" },
+    "relevant": { "score": 8, "note": "Directly tied to goal" },
+    "timeBound": { "score": 6, "note": "Inherits quarter from goal" }
+  },
+  "suggestions": [
+    "Consider adding a leading indicator like 'weekly active users'",
+    "The 20% target is ambitious - consider interim milestones",
+    "Add a quality metric alongside quantity to prevent gaming"
+  ],
+  "risks": [
+    "Could incentivize short-term gains over long-term value"
+  ]
+}
+```
+
+#### 3. Alignment Suggestions 🔗
+**When**: User creates a goal without linking to parent
+**How**: AI analyzes goal content and suggests best parent matches
+
+```typescript
+const alignmentPrompt = `
+Find the best parent goals for this objective:
+
+New goal: "${goal.title}" 
+Team: ${team.name} (${team.level})
+Quarter: ${goal.quarter}
+
+Available parent goals (${team.parentLevel} level):
+${parentGoals.map((g, i) => `${i+1}. "${g.title}" - ${g.description}`).join('\n')}
+
+Rank the top 3 matches by relevance and explain the connection.
+Consider: semantic similarity, strategic fit, contribution potential.
+`;
+```
+
+#### 4. Progress Narrative Generator 📝
+**When**: Viewing goal progress or generating reports
+**How**: AI summarizes progress data into human-readable narrative
+
+```typescript
+const progressSummaryPrompt = `
+Generate an executive summary of OKR progress:
+
+Goal: "${goal.title}"
+Status: ${goal.status}
+Time elapsed: ${weeksElapsed} of ${totalWeeks} weeks
+
+Measures:
+${measures.map(m => `
+- ${m.title}: ${m.currentValue}/${m.targetValue} ${m.unit} (${m.progress}%)
+  Trend: ${m.trend} | Last update: ${m.lastUpdate}
+`).join('')}
+
+Recent updates:
+${updates.map(u => `- ${u.date}: ${u.content}`).join('\n')}
+
+Write a 2-3 sentence summary suitable for an executive dashboard.
+Highlight: overall status, key wins, main risks, recommended actions.
+`;
+```
+
+**Output**: 
+> "Revenue target is on track at 68% with 6 weeks remaining. Strong performance in EMEA (+15% above plan) is offsetting APAC delays. Recommend focusing Q1 push on enterprise deals in pipeline to secure the remaining $2.3M."
+
+#### 5. Risk Detection & Alerts 🚨
+**When**: Background job runs daily/weekly
+**How**: AI analyzes patterns across goals to identify risks
+
+```typescript
+const riskDetectionPrompt = `
+Analyze this goal portfolio for risks:
+
+Team: ${team.name}
+Goals this quarter: ${goals.length}
+
+${goals.map(g => `
+Goal: ${g.title}
+Progress: ${g.progress}% (expected: ${g.expectedProgress}%)
+Measures at risk: ${g.measuresAtRisk}
+Days since update: ${g.daysSinceUpdate}
+`).join('\n')}
+
+Identify:
+1. Goals likely to miss targets (with confidence %)
+2. Patterns suggesting systemic issues
+3. Goals with stale data (not updated recently)
+4. Resource conflicts or dependencies
+5. Recommended interventions
+`;
+```
+
+#### 6. Natural Language Queries 💬
+**When**: User asks questions in AI chat interface
+**How**: AI interprets questions and queries the database
 
 ```
-Cache Key Patterns:
-├── user:{id}                    # User profile (TTL: 1h)
-├── user:{id}:goals              # User's goals list (TTL: 5m)
-├── team:{id}                    # Team details (TTL: 1h)
-├── team:{id}:goals              # Team goals (TTL: 5m)
-├── goal:{id}                    # Single goal (TTL: 5m)
-├── goal:{id}:children           # Child goals (TTL: 5m)
-├── goal:{id}:parents            # Parent goals (TTL: 5m)
-├── corporate:goals:Q{x}-{year}  # Corporate goals per quarter (TTL: 15m)
-└── session:{token}              # User session (TTL: 8h)
+User: "How are we doing on revenue goals this quarter?"
 
-Invalidation Strategy:
-- On goal create/update/delete → invalidate goal:{id}, team:{id}:goals, user:{id}:goals
-- On progress update → invalidate goal:{id}
-- Use Redis pub/sub for multi-instance cache invalidation
+AI: "Here's your Q1 2026 revenue goal summary:
+
+📊 Corporate Revenue Goal: 72% complete
+   Target: $50M | Current: $36M | Gap: $14M
+
+Breaking down by region:
+• EMEA: 85% ✅ (ahead of plan)
+• Americas: 70% (on track)  
+• APAC: 58% ⚠️ (behind - needs attention)
+
+Top contributing team goals:
+1. Enterprise Sales: +$12M (80% of target)
+2. Mid-Market: +$8M (65% of target)
+3. Renewals: +$16M (95% of target) ✅
+
+Would you like me to drill into APAC or suggest actions?"
 ```
+
+#### 7. OKR Coaching & Best Practices 🎓
+**When**: User requests help or system detects poor OKR patterns
+**How**: Contextual coaching based on user's actual goals
+
+```typescript
+const coachingPrompt = `
+Act as an OKR coach. The user needs guidance.
+
+Their current goals:
+${userGoals.map(g => g.title).join('\n')}
+
+Common issues detected:
+- ${issues.join('\n- ')}
+
+User question: "${userQuestion}"
+
+Provide practical, specific advice. Reference their actual goals.
+Include examples of what good looks like.
+Keep it encouraging but direct.
+`;
+```
+
+#### 8. Quarterly Report Generation 📋
+**When**: End of quarter or on-demand
+**How**: AI generates narrative report from structured data
+
+**Output**: Full markdown report with:
+- Executive summary
+- Goal completion rates by level
+- Top achievements
+- Misses and learnings
+- Recommendations for next quarter
+- Appendix with detailed metrics
+
+#### 9. Goal Quality Scoring 📈
+**When**: Goal is created/updated
+**How**: Automatic scoring shown in UI
+
+```
+Goal Quality Score: 8.2/10
+
+✅ Clear and inspiring (9/10)
+✅ Measurable outcomes defined (8/10)
+✅ Aligned to parent goals (9/10)
+⚠️ Stretch factor could be higher (6/10)
+✅ Time-bound (10/10)
+
+"This is a strong goal. Consider making the target 
+more ambitious - historical data suggests your team 
+typically achieves 110% of targets."
+```
+
+#### 10. Meeting Prep Assistant 📅
+**When**: Before OKR review meetings
+**How**: AI generates talking points and questions
+
+```
+📋 OKR Review Prep - Engineering Team
+
+Key Discussion Points:
+1. Platform Reliability goal at 92% - celebrate the win!
+2. Developer Productivity showing only 45% progress - dig into blockers
+3. 3 goals have no updates in 2+ weeks - need status check
+
+Suggested Questions:
+• "What's blocking the CI/CD pipeline improvements?"
+• "Do we need to adjust the code review time target?"
+• "Should we de-scope the documentation goal given priorities?"
+
+Time Allocation Suggestion:
+• 5 min: Wins (Reliability)
+• 15 min: Deep dive (Productivity blockers)
+• 10 min: Status updates on stale goals
+```
+
+### LLM API Endpoints
+
+```typescript
+// POST /api/ai/suggest-goal
+// Suggest improvements to a draft goal
+{
+  "draftTitle": "Improve sales",
+  "draftDescription": "Make more sales",
+  "teamId": "uuid",
+  "quarter": "Q1-2026"
+}
+
+// POST /api/ai/review-measure  
+// Analyze a measure for quality
+{
+  "goalId": "uuid",
+  "measureTitle": "Increase revenue",
+  "targetValue": 1000000,
+  "unit": "$"
+}
+
+// POST /api/ai/suggest-alignment
+// Recommend parent goals to link to
+{
+  "goalId": "uuid"
+}
+
+// POST /api/ai/summarize-progress
+// Generate narrative summary
+{
+  "goalId": "uuid",  // or teamId for team summary
+  "format": "brief" | "detailed"
+}
+
+// POST /api/ai/chat
+// Natural language queries
+{
+  "message": "How is my team doing?",
+  "context": { "teamId": "uuid", "quarter": "Q1-2026" }
+}
+
+// GET /api/ai/insights
+// Get AI-generated insights for dashboard
+{
+  "scope": "user" | "team" | "corporate",
+  "scopeId": "uuid"
+}
+```
+
+### Cost Management
+- Cache common queries (goal suggestions for same context)
+- Rate limit: 50 AI requests/user/day
+- Batch processing for reports (off-peak hours)
+- Use smaller/faster models for simple tasks (scoring)
+- Estimated cost: ~$0.02/user/month at typical usage
 
 ---
 
 ## Database Schema
 
-### Prisma Schema
+### Prisma Schema (Updated with AI tables)
 
 ```prisma
-// prisma/schema.prisma
+// ... (previous schema remains the same)
 
-generator client {
-  provider = "prisma-client-js"
-}
+// ============ AI INTERACTIONS ============
 
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
+model AIInteraction {
+  id           String   @id @default(uuid())
+  userId       String
+  type         AIInteractionType
+  prompt       String   @db.Text
+  response     String   @db.Text
+  model        String   // e.g., "claude-3-sonnet"
+  tokens       Int      // Total tokens used
+  latencyMs    Int      // Response time
+  rating       Int?     // User feedback (1-5)
+  entityType   String?  // e.g., "Goal", "Measure"
+  entityId     String?
+  createdAt    DateTime @default(now())
 
-// ============ ORGANIZATION ============
-
-model Organization {
-  id        String   @id @default(uuid())
-  name      String
-  domain    String   @unique // e.g., "moodys.com"
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  teams Team[]
-  users User[]
-}
-
-// ============ TEAM HIERARCHY ============
-
-model Team {
-  id             String       @id @default(uuid())
-  organizationId String
-  parentTeamId   String?      // Self-reference for hierarchy
-  name           String
-  level          TeamLevel
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-
-  organization Organization  @relation(fields: [organizationId], references: [id])
-  parentTeam   Team?         @relation("TeamHierarchy", fields: [parentTeamId], references: [id])
-  childTeams   Team[]        @relation("TeamHierarchy")
-  users        User[]
-  goals        Goal[]
-
-  @@index([organizationId])
-  @@index([parentTeamId])
-  @@index([level])
-}
-
-enum TeamLevel {
-  CORPORATE    // C-suite / Company-wide
-  EXECUTIVE    // Executive leadership team
-  DEPARTMENT   // Department / Division
-  TEAM         // Team / Squad
-  INDIVIDUAL   // Individual contributor
-}
-
-// ============ USER ============
-
-model User {
-  id             String   @id @default(uuid())
-  organizationId String
-  teamId         String
-  managerId      String?  // Direct manager
-  email          String   @unique
-  name           String
-  role           UserRole
-  ssoId          String?  @unique // External SSO identifier
-  avatarUrl      String?
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  organization Organization     @relation(fields: [organizationId], references: [id])
-  team         Team             @relation(fields: [teamId], references: [id])
-  manager      User?            @relation("ManagerReports", fields: [managerId], references: [id])
-  reports      User[]           @relation("ManagerReports")
-  ownedGoals   Goal[]           @relation("GoalOwner")
-  goalUpdates  GoalUpdate[]
-  progress     Progress[]
-
-  @@index([organizationId])
-  @@index([teamId])
-  @@index([managerId])
-  @@index([email])
-}
-
-enum UserRole {
-  ADMIN        // Full system access
-  EXECUTIVE    // Can create corporate goals
-  MANAGER      // Can manage team goals
-  CONTRIBUTOR  // Can manage own goals
-  VIEWER       // Read-only access
-}
-
-// ============ GOALS ============
-
-model Goal {
-  id          String     @id @default(uuid())
-  teamId      String
-  ownerId     String
-  title       String
-  description String?
-  quarter     String     // e.g., "Q1-2026"
-  status      GoalStatus @default(DRAFT)
-  priority    Int        @default(0) // For ordering
-  dueDate     DateTime?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-
-  team     Team         @relation(fields: [teamId], references: [id])
-  owner    User         @relation("GoalOwner", fields: [ownerId], references: [id])
-  measures Measure[]
-  updates  GoalUpdate[]
-
-  // Many-to-many: this goal links to parent goals
-  parentLinks GoalLink[] @relation("ChildGoal")
-  // Many-to-many: goals that link to this as a parent
-  childLinks  GoalLink[] @relation("ParentGoal")
-
-  @@index([teamId])
-  @@index([ownerId])
-  @@index([quarter])
-  @@index([status])
-}
-
-enum GoalStatus {
-  DRAFT      // Not yet active
-  ACTIVE     // In progress
-  AT_RISK    // Behind schedule
-  COMPLETED  // Successfully achieved
-  CANCELLED  // No longer relevant
-}
-
-// ============ GOAL LINKS (Many-to-Many) ============
-
-model GoalLink {
-  id                 String   @id @default(uuid())
-  childGoalId        String   // The lower-level goal
-  parentGoalId       String   // The higher-level goal it aligns to
-  contributionWeight Int      @default(100) // % contribution (0-100)
-  createdAt          DateTime @default(now())
-
-  childGoal  Goal @relation("ChildGoal", fields: [childGoalId], references: [id], onDelete: Cascade)
-  parentGoal Goal @relation("ParentGoal", fields: [parentGoalId], references: [id], onDelete: Cascade)
-
-  @@unique([childGoalId, parentGoalId])
-  @@index([childGoalId])
-  @@index([parentGoalId])
-}
-
-// ============ MEASURES / KEY RESULTS ============
-
-model Measure {
-  id           String      @id @default(uuid())
-  goalId       String
-  title        String
-  description  String?
-  unit         String      // e.g., "%", "$", "#", "score"
-  targetValue  Float
-  startValue   Float       @default(0)
-  currentValue Float       @default(0)
-  measureType  MeasureType @default(INCREASE)
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
-
-  goal     Goal       @relation(fields: [goalId], references: [id], onDelete: Cascade)
-  progress Progress[]
-
-  @@index([goalId])
-}
-
-enum MeasureType {
-  INCREASE   // Higher is better (e.g., revenue)
-  DECREASE   // Lower is better (e.g., costs)
-  TARGET     // Hit specific target (e.g., launch date)
-  MAINTAIN   // Stay within range
-}
-
-// ============ PROGRESS TRACKING ============
-
-model Progress {
-  id          String   @id @default(uuid())
-  measureId   String
-  recordedBy  String
-  value       Float
-  notes       String?
-  recordedAt  DateTime @default(now())
-
-  measure Measure @relation(fields: [measureId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [recordedBy], references: [id])
-
-  @@index([measureId])
-  @@index([recordedAt])
-}
-
-// ============ GOAL UPDATES / COMMENTS ============
-
-model GoalUpdate {
-  id        String   @id @default(uuid())
-  goalId    String
-  userId    String
-  content   String
-  type      UpdateType @default(COMMENT)
-  createdAt DateTime @default(now())
-
-  goal Goal @relation(fields: [goalId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id])
 
-  @@index([goalId])
-  @@index([createdAt])
-}
-
-enum UpdateType {
-  COMMENT       // General comment
-  STATUS_CHANGE // Status was updated
-  PROGRESS      // Progress was recorded
-}
-
-// ============ AUDIT LOG ============
-
-model AuditLog {
-  id         String   @id @default(uuid())
-  userId     String
-  action     String   // e.g., "GOAL_CREATED", "MEASURE_UPDATED"
-  entityType String   // e.g., "Goal", "Measure"
-  entityId   String
-  oldValue   Json?
-  newValue   Json?
-  ipAddress  String?
-  userAgent  String?
-  createdAt  DateTime @default(now())
-
   @@index([userId])
-  @@index([entityType, entityId])
+  @@index([type])
   @@index([createdAt])
 }
-```
 
-### Database Indexes for Performance
+enum AIInteractionType {
+  GOAL_SUGGESTION
+  MEASURE_REVIEW
+  ALIGNMENT_SUGGESTION
+  PROGRESS_SUMMARY
+  CHAT_QUERY
+  RISK_DETECTION
+  REPORT_GENERATION
+}
 
-```sql
--- Hierarchical queries (recursive CTEs)
-CREATE INDEX CONCURRENTLY idx_goal_links_alignment 
-ON "GoalLink" (child_goal_id, parent_goal_id) 
-INCLUDE (contribution_weight);
+model AIInsight {
+  id          String   @id @default(uuid())
+  scope       String   // "user", "team", "corporate"
+  scopeId     String   // userId, teamId, or orgId
+  quarter     String
+  insightType String   // "risk", "achievement", "recommendation"
+  title       String
+  content     String   @db.Text
+  priority    Int      @default(0)
+  dismissed   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
 
--- Dashboard queries
-CREATE INDEX CONCURRENTLY idx_goals_team_quarter_status 
-ON "Goal" (team_id, quarter, status);
+  @@index([scope, scopeId])
+  @@index([quarter])
+}
 
--- User's goals view
-CREATE INDEX CONCURRENTLY idx_goals_owner_quarter 
-ON "Goal" (owner_id, quarter);
+// ============ NOTIFICATIONS ============
 
--- Progress history
-CREATE INDEX CONCURRENTLY idx_progress_measure_time 
-ON "Progress" (measure_id, recorded_at DESC);
+model NotificationPreference {
+  id                    String   @id @default(uuid())
+  userId                String   @unique
+  emailEnabled          Boolean  @default(true)
+  teamsEnabled          Boolean  @default(true)
+  pushEnabled           Boolean  @default(true)
+  weeklyDigest          Boolean  @default(true)
+  progressReminders     Boolean  @default(true)
+  goalDeadlineAlerts    Boolean  @default(true)
+  aiInsightsEnabled     Boolean  @default(true)
+  
+  user User @relation(fields: [userId], references: [id])
+}
 
--- Full-text search on goals
-CREATE INDEX CONCURRENTLY idx_goals_search 
-ON "Goal" USING gin(to_tsvector('english', title || ' ' || COALESCE(description, '')));
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String
+  data      Json?
+  read      Boolean  @default(false)
+  channels  String[] // ["email", "teams", "push"]
+  sentAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, read])
+  @@index([createdAt])
+}
+
+enum NotificationType {
+  GOAL_ASSIGNED
+  PROGRESS_REMINDER
+  GOAL_AT_RISK
+  GOAL_COMPLETED
+  COMMENT_ADDED
+  WEEKLY_DIGEST
+  AI_INSIGHT
+  QUARTER_ENDING
+}
 ```
 
 ---
 
-## API Specification
+## Mobile App
 
-See [docs/api-spec.md](./docs/api-spec.md) for complete API documentation.
+### Technology Stack
+- **Framework**: React Native (code sharing with web)
+- **State**: React Query + Zustand
+- **Navigation**: React Navigation
+- **Push**: Firebase Cloud Messaging (FCM) + APNs
+- **Auth**: Okta React Native SDK
 
-### Key Endpoints Summary
+### App Structure
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/auth/saml/login` | Initiate SAML login |
-| GET | `/api/auth/saml/callback` | SAML callback |
-| POST | `/api/auth/logout` | End session |
-| GET | `/api/users/me` | Current user profile |
-| GET | `/api/goals` | List goals (with filters) |
-| POST | `/api/goals` | Create goal |
-| GET | `/api/goals/:id` | Get goal with measures |
-| PUT | `/api/goals/:id` | Update goal |
-| DELETE | `/api/goals/:id` | Delete goal |
-| POST | `/api/goals/:id/link` | Link to parent goal |
-| GET | `/api/goals/:id/alignment` | Get alignment tree |
-| GET | `/api/goals/:id/children` | Get child goals |
-| POST | `/api/measures` | Create measure |
-| PUT | `/api/measures/:id` | Update measure |
-| POST | `/api/progress` | Record progress |
-| GET | `/api/teams/:id/goals` | Team goals |
-| GET | `/api/reports/quarterly` | Quarterly report |
-| GET | `/api/reports/alignment` | Alignment report |
+```
+mobile/
+├── src/
+│   ├── App.tsx
+│   ├── navigation/
+│   │   ├── RootNavigator.tsx
+│   │   ├── AuthNavigator.tsx
+│   │   └── MainNavigator.tsx
+│   ├── screens/
+│   │   ├── auth/
+│   │   │   └── LoginScreen.tsx      # Okta SSO
+│   │   ├── home/
+│   │   │   └── DashboardScreen.tsx  # My OKRs overview
+│   │   ├── goals/
+│   │   │   ├── GoalListScreen.tsx
+│   │   │   ├── GoalDetailScreen.tsx
+│   │   │   ├── CreateGoalScreen.tsx
+│   │   │   └── UpdateProgressScreen.tsx
+│   │   ├── ai/
+│   │   │   └── AIChatScreen.tsx     # AI assistant
+│   │   └── settings/
+│   │       └── SettingsScreen.tsx
+│   ├── components/
+│   │   ├── GoalCard.tsx
+│   │   ├── ProgressRing.tsx
+│   │   ├── AIAssistantFAB.tsx       # Floating AI button
+│   │   └── QuickProgressEntry.tsx
+│   ├── hooks/
+│   │   └── useAuth.ts
+│   ├── services/
+│   │   ├── api.ts
+│   │   └── push.ts
+│   └── shared/                       # Shared with web
+│       ├── types/
+│       └── utils/
+├── ios/
+├── android/
+└── package.json
+```
+
+### Key Mobile Features
+
+1. **Quick Progress Updates**: One-tap progress entry from home screen
+2. **Push Notifications**: Goal reminders, @mentions, AI insights
+3. **Offline Support**: View goals offline, queue updates
+4. **AI Chat**: Voice-to-text for asking questions
+5. **Widgets**: iOS/Android home screen widgets showing goal progress
+6. **Deep Links**: Open specific goals from Teams/email links
+
+### Mobile Screens
+
+```
+┌─────────────────────┐  ┌─────────────────────┐  ┌─────────────────────┐
+│ Dashboard           │  │ Goal Detail         │  │ AI Chat             │
+├─────────────────────┤  ├─────────────────────┤  ├─────────────────────┤
+│ ┌─────────────────┐ │  │ Increase Revenue    │  │ ┌─────────────────┐ │
+│ │ Q1 Progress     │ │  │ ━━━━━━━━━━━━ 72%   │  │ │ How's my team   │ │
+│ │ ████████░░ 78%  │ │  │                     │  │ │ doing?          │ │
+│ └─────────────────┘ │  │ Key Results:        │  │ └─────────────────┘ │
+│                     │  │ ├─ Revenue: $36M    │  │                     │
+│ My Goals (4)        │  │ │  ████████░░ 72%   │  │ ┌─────────────────┐ │
+│ ├─ Increase Rev ▶  │  │ ├─ Deals: 45        │  │ │ Your team is at │ │
+│ ├─ Launch Prod  ▶  │  │ │  ██████░░░░ 60%   │  │ │ 78% overall.    │ │
+│ ├─ Hire Team    ▶  │  │ └─ NPS: 72          │  │ │                 │ │
+│ └─ Reduce Cost  ▶  │  │    ██████████ 95%   │  │ │ 🎉 Revenue goal │ │
+│                     │  │                     │  │ │ is ahead!       │ │
+│ ┌─────────────────┐ │  │ [+ Update Progress] │  │ │                 │ │
+│ │ 💡 AI Insight   │ │  │                     │  │ │ ⚠️ Hiring is    │ │
+│ │ APAC revenue is │ │  │ Aligned to:        │  │ │ behind by 2     │ │
+│ │ behind - tap    │ │  │ → Global Growth    │  │ │ weeks.          │ │
+│ │ for suggestions │ │  │                     │  │ └─────────────────┘ │
+│ └─────────────────┘ │  │ Updates (3)         │  │                     │
+│                     │  │ └─ Jan 20: Strong...│  │ [Type a message...] │
+│ [🤖 Ask AI]         │  │                     │  │ [🎤]               │
+└─────────────────────┘  └─────────────────────┘  └─────────────────────┘
+```
+
+---
+
+## Integrations
+
+### 1. Okta SSO (Authentication)
+
+**Configuration**:
+```typescript
+// config/okta.ts
+export const oktaConfig = {
+  issuer: 'https://moodys.okta.com/oauth2/default',
+  clientId: process.env.OKTA_CLIENT_ID,
+  redirectUri: 'https://okr.moodys.com/auth/callback',
+  scopes: ['openid', 'profile', 'email', 'groups'],
+  pkce: true
+};
+```
+
+**User Provisioning**:
+- SCIM integration for automatic user sync
+- Group-to-role mapping:
+  - `OKR-Admins` → ADMIN
+  - `OKR-Executives` → EXECUTIVE
+  - `OKR-Managers` → MANAGER
+  - `Default` → CONTRIBUTOR
+
+### 2. Microsoft Teams Integration
+
+**Features**:
+- **Notifications**: Goal updates, reminders, AI insights
+- **Bot Commands**:
+  - `/okr status` - Show my goals summary
+  - `/okr update [goal] [value]` - Quick progress update
+  - `/okr ask [question]` - AI query
+- **Adaptive Cards**: Rich goal cards with action buttons
+- **Tab App**: Embedded OKR dashboard in Teams
+
+**Architecture**:
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   Teams     │────▶│  Bot        │────▶│  OKR API    │
+│   Client    │◀────│  Service    │◀────│  Backend    │
+└─────────────┘     └─────────────┘     └─────────────┘
+                          │
+                    ┌─────┴─────┐
+                    │  Azure    │
+                    │  Bot Svc  │
+                    └───────────┘
+```
+
+**Notification Card Example**:
+```json
+{
+  "type": "AdaptiveCard",
+  "body": [
+    {
+      "type": "TextBlock",
+      "text": "🎯 Goal Progress Update",
+      "weight": "bolder"
+    },
+    {
+      "type": "TextBlock",
+      "text": "**Increase Revenue by 20%** is now at 72%"
+    },
+    {
+      "type": "FactSet",
+      "facts": [
+        { "title": "Current", "value": "$36M" },
+        { "title": "Target", "value": "$50M" },
+        { "title": "Gap", "value": "$14M" }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.OpenUrl",
+      "title": "View Goal",
+      "url": "https://okr.moodys.com/goals/abc123"
+    },
+    {
+      "type": "Action.Submit",
+      "title": "Update Progress",
+      "data": { "action": "updateProgress", "goalId": "abc123" }
+    }
+  ]
+}
+```
+
+### 3. Email Notifications (AWS SES)
+
+**Notification Types**:
+| Type | Trigger | Frequency |
+|------|---------|-----------|
+| Weekly Digest | Sunday 6pm | Weekly |
+| Progress Reminder | No update in 7 days | As needed |
+| Goal at Risk | Progress < expected | Immediate |
+| Deadline Alert | 7 days before due | Once |
+| AI Insight | New insight generated | Daily max |
+| Quarter End | 2 weeks before | Once |
+
+**Email Template Example**:
+```html
+Subject: 📊 Your Weekly OKR Summary - Q1 2026 Week 3
+
+Hi {{name}},
+
+Here's your OKR progress this week:
+
+📈 OVERALL: 72% (↑ 5% from last week)
+
+YOUR GOALS:
+✅ Increase Revenue: 75% (+8%)
+⚠️ Launch Product: 45% (+2%) - Behind schedule
+✅ Reduce Costs: 82% (+12%)
+
+🤖 AI INSIGHTS:
+• Product launch is at risk - consider descoping features
+• Revenue goal trending to exceed target by 10%
+
+ACTION NEEDED:
+• Update "Launch Product" progress (last update: 12 days ago)
+
+[View Dashboard] [Update Progress]
+```
 
 ---
 
 ## Implementation Phases
 
 ### Phase 1: Foundation (Weeks 1-3) - 120 hours
-
-| Task | Hours | Description |
-|------|-------|-------------|
-| Project setup | 8 | Monorepo, ESLint, Prettier, Husky |
-| Database schema | 16 | Prisma schema, migrations, seed data |
-| Backend scaffolding | 24 | Express, middleware, error handling |
-| Authentication | 24 | SAML integration, JWT, sessions |
-| Frontend scaffolding | 24 | Vite, React, routing, auth flow |
-| Docker setup | 16 | Dockerfiles, docker-compose, dev env |
-| CI/CD pipeline | 8 | GitHub Actions basic workflow |
-
-**Deliverable**: Users can authenticate and see a basic dashboard
+*No changes from original*
 
 ### Phase 2: Goal Management (Weeks 4-6) - 160 hours
-
-| Task | Hours | Description |
-|------|-------|-------------|
-| Goal CRUD API | 24 | Create, read, update, delete goals |
-| Goal UI components | 40 | GoalCard, GoalForm, GoalList |
-| Goal linking API | 24 | Parent-child relationships |
-| Goal linking UI | 24 | Link selector, tree view |
-| Team hierarchy | 24 | Team management, permissions |
-| Unit tests | 24 | API and component tests |
-
-**Deliverable**: Users can create and link goals
+*No changes from original*
 
 ### Phase 3: Measures & Progress (Weeks 7-8) - 100 hours
-
-| Task | Hours | Description |
-|------|-------|-------------|
-| Measure CRUD API | 16 | Create, update measures |
-| Progress tracking API | 16 | Record progress entries |
-| Measure UI components | 24 | MeasureCard, MeasureForm |
-| Progress UI | 24 | ProgressInput, charts |
-| Progress calculations | 12 | Roll-up percentages |
-| Tests | 8 | Measure/progress tests |
-
-**Deliverable**: Users can add measures and track progress
+*No changes from original*
 
 ### Phase 4: Alignment Visualization (Weeks 9-10) - 80 hours
-
-| Task | Hours | Description |
-|------|-------|-------------|
-| Alignment query API | 16 | Recursive CTE queries |
-| Tree visualization | 32 | Interactive goal tree (D3.js or React Flow) |
-| "My Alignment" view | 16 | Individual → corporate path |
-| Impact analysis | 16 | Show how goals contribute up |
-
-**Deliverable**: Users can visualize goal alignment
+*No changes from original*
 
 ### Phase 5: Reporting & Dashboards (Weeks 11-12) - 80 hours
+*No changes from original*
+
+### Phase 6: LLM Integration (Weeks 13-15) - 120 hours ⭐ NEW
 
 | Task | Hours | Description |
 |------|-------|-------------|
-| Executive dashboard | 24 | Company-wide overview |
-| Team dashboard | 16 | Team progress view |
-| Personal dashboard | 16 | My goals and progress |
-| Quarterly reports | 16 | Snapshot and export |
-| Export functionality | 8 | CSV, PDF export |
+| LLM service setup | 16 | Bedrock/API integration, abstraction layer |
+| Prompt engineering | 24 | Develop and test all prompt templates |
+| Goal suggestion API | 16 | Real-time goal improvement suggestions |
+| Measure review API | 16 | SMART criteria analysis |
+| AI chat interface | 24 | Natural language query system |
+| Progress summaries | 8 | Narrative generation |
+| AI insights dashboard | 16 | Proactive insights widget |
 
-**Deliverable**: Comprehensive dashboards and reports
+**Deliverable**: AI assistant fully integrated throughout app
 
-### Phase 6: Performance & Scale (Weeks 13-14) - 80 hours
+### Phase 7: Integrations (Weeks 16-17) - 80 hours ⭐ NEW
 
 | Task | Hours | Description |
 |------|-------|-------------|
-| Redis caching | 16 | Implement caching layer |
-| Database optimization | 16 | Query optimization, indexes |
-| Load testing | 24 | Artillery/k6 tests for 18k users |
-| Horizontal scaling | 16 | K8s HPA configuration |
-| Performance monitoring | 8 | APM setup (Datadog/New Relic) |
+| Okta SSO | 16 | OIDC/SAML integration, group sync |
+| AWS SES | 8 | Email templates, sending service |
+| MS Teams bot | 32 | Bot framework, adaptive cards, commands |
+| Push notifications | 16 | FCM/APNs setup |
+| Webhook system | 8 | Outbound events for integrations |
 
-**Deliverable**: System handles 18k concurrent users
+**Deliverable**: Full enterprise integration
 
-### Total Estimated Hours: 620 hours
+### Phase 8: Mobile App (Weeks 18-21) - 160 hours ⭐ NEW
+
+| Task | Hours | Description |
+|------|-------|-------------|
+| React Native setup | 16 | Project scaffolding, navigation |
+| Auth flow | 16 | Okta SDK integration |
+| Core screens | 48 | Dashboard, goals, progress |
+| AI chat screen | 16 | Voice-to-text, chat UI |
+| Push notifications | 16 | FCM/APNs integration |
+| Offline support | 24 | Local storage, sync queue |
+| App store prep | 24 | Screenshots, listings, submission |
+
+**Deliverable**: iOS and Android apps published
+
+### Phase 9: Performance & Polish (Weeks 22-24) - 80 hours
+
+| Task | Hours | Description |
+|------|-------|-------------|
+| Load testing | 24 | 18k user simulation |
+| Performance optimization | 24 | Caching, query optimization |
+| Security audit | 16 | Penetration testing, fixes |
+| Documentation | 16 | User guides, API docs |
+
+**Deliverable**: Production-ready system
+
+### Total Estimated Hours: 980 hours (~6 months with small team)
 
 ---
 
 ## Testing Strategy
 
-### Unit Tests (Jest/Vitest)
-- **Coverage target**: 80%
-- Controllers, services, repositories
-- React components (React Testing Library)
-- Utility functions
+*Previous testing strategy remains, plus:*
 
-### Integration Tests
-- API endpoint tests with supertest
-- Database operations with test database
-- Authentication flows
+### AI-Specific Testing
 
-### E2E Tests (Playwright)
-- Critical user journeys:
-  - Login → Create goal → Add measure → Record progress
-  - Link goal to parent → View alignment
-  - Dashboard views and reports
+```typescript
+// AI response quality tests
+describe('Goal Suggestion AI', () => {
+  it('improves vague goals', async () => {
+    const result = await aiService.suggestGoal({
+      draft: 'Make things better'
+    });
+    expect(result.improvedTitle).toMatch(/specific|measurable/i);
+    expect(result.suggestions.length).toBeGreaterThan(0);
+  });
 
-### Load Testing (Artillery/k6)
-```yaml
-# artillery-config.yml
-config:
-  target: 'https://okr-staging.moodys.com'
-  phases:
-    - duration: 60
-      arrivalRate: 50     # Ramp up
-    - duration: 300
-      arrivalRate: 300    # Sustained (18k users ≈ 300 concurrent)
-    - duration: 60
-      arrivalRate: 500    # Peak load test
+  it('respects context', async () => {
+    const result = await aiService.suggestGoal({
+      draft: 'Increase revenue',
+      teamLevel: 'INDIVIDUAL'
+    });
+    expect(result.improvedTitle).not.toContain('company-wide');
+  });
+});
 
-scenarios:
-  - name: "Typical user session"
-    flow:
-      - get:
-          url: "/api/users/me"
-      - get:
-          url: "/api/goals?quarter=Q1-2026"
-      - get:
-          url: "/api/goals/{{ goalId }}"
-      - post:
-          url: "/api/progress"
-          json:
-            measureId: "{{ measureId }}"
-            value: 42
+// Measure review accuracy
+describe('Measure Review AI', () => {
+  it('catches unmeasurable measures', async () => {
+    const result = await aiService.reviewMeasure({
+      title: 'Improve team morale',
+      unit: 'happiness'
+    });
+    expect(result.score).toBeLessThan(6);
+    expect(result.suggestions).toContain(/quantif|measur/i);
+  });
+});
 ```
-
-### Performance Targets
-- API response time: p95 < 200ms
-- Dashboard load time: < 2s
-- Search results: < 500ms
-- Concurrent users: 18,000+
 
 ---
 
-## Deployment Plan
+## AWS Deployment
 
-### Container Images
-```dockerfile
-# Frontend (frontend/Dockerfile)
-FROM node:20-alpine AS builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-RUN npm run build
+### Architecture
 
-FROM nginx:alpine
-COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
-
-# Backend (backend/Dockerfile)
-FROM node:20-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production
-COPY . .
-RUN npx prisma generate
-RUN npm run build
-EXPOSE 4000
-CMD ["node", "dist/index.js"]
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                  AWS Cloud                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                           VPC (10.0.0.0/16)                          │    │
+│  │  ┌─────────────────────────┐  ┌─────────────────────────┐           │    │
+│  │  │   Public Subnet A       │  │   Public Subnet B       │           │    │
+│  │  │   (10.0.1.0/24)         │  │   (10.0.2.0/24)         │           │    │
+│  │  │   ┌─────────────────┐   │  │   ┌─────────────────┐   │           │    │
+│  │  │   │      ALB        │   │  │   │      NAT        │   │           │    │
+│  │  │   └─────────────────┘   │  │   └─────────────────┘   │           │    │
+│  │  └─────────────────────────┘  └─────────────────────────┘           │    │
+│  │  ┌─────────────────────────┐  ┌─────────────────────────┐           │    │
+│  │  │   Private Subnet A      │  │   Private Subnet B      │           │    │
+│  │  │   (10.0.10.0/24)        │  │   (10.0.20.0/24)        │           │    │
+│  │  │   ┌─────────────────┐   │  │   ┌─────────────────┐   │           │    │
+│  │  │   │   EKS Nodes     │   │  │   │   EKS Nodes     │   │           │    │
+│  │  │   └─────────────────┘   │  │   └─────────────────┘   │           │    │
+│  │  └─────────────────────────┘  └─────────────────────────┘           │    │
+│  │  ┌─────────────────────────┐  ┌─────────────────────────┐           │    │
+│  │  │   Data Subnet A         │  │   Data Subnet B         │           │    │
+│  │  │   (10.0.100.0/24)       │  │   (10.0.200.0/24)       │           │    │
+│  │  │   ┌───────┐ ┌───────┐   │  │   ┌───────┐ ┌───────┐   │           │    │
+│  │  │   │  RDS  │ │ Redis │   │  │   │  RDS  │ │ Redis │   │           │    │
+│  │  │   │Primary│ │Primary│   │  │   │Replica│ │Replica│   │           │    │
+│  │  │   └───────┘ └───────┘   │  │   └───────┘ └───────┘   │           │    │
+│  │  └─────────────────────────┘  └─────────────────────────┘           │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                              │
+│  External Services:                                                          │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐          │
+│  │CloudFront│ │   SES    │ │ Bedrock  │ │  Secrets │ │    S3    │          │
+│  │   CDN    │ │  Email   │ │  Claude  │ │ Manager  │ │ Backups  │          │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘          │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Kubernetes Resources
-```yaml
-# k8s/deployment.yaml (simplified)
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: okr-backend
-spec:
-  replicas: 5
-  selector:
-    matchLabels:
-      app: okr-backend
-  template:
-    spec:
-      containers:
-      - name: backend
-        image: okr-tracker/backend:latest
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "250m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
-        env:
-        - name: DATABASE_URL
-          valueFrom:
-            secretKeyRef:
-              name: okr-secrets
-              key: database-url
----
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: okr-backend-hpa
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: okr-backend
-  minReplicas: 5
-  maxReplicas: 20
-  metrics:
-  - type: Resource
-    resource:
-      name: cpu
-      target:
-        type: Utilization
-        averageUtilization: 70
+### AWS Services Used
+
+| Service | Purpose | Configuration |
+|---------|---------|---------------|
+| EKS | Kubernetes cluster | 3 nodes, m6i.xlarge |
+| RDS PostgreSQL | Database | db.r6g.xlarge, Multi-AZ |
+| ElastiCache Redis | Caching, sessions | cache.r6g.large, 2 nodes |
+| ALB | Load balancer | Path-based routing |
+| CloudFront | CDN | Global edge caching |
+| SES | Email | Production access |
+| Bedrock | LLM | Claude 3.5 Sonnet |
+| Secrets Manager | Credentials | API keys, DB creds |
+| S3 | Storage | Backups, exports |
+| CloudWatch | Monitoring | Logs, metrics, alarms |
+| WAF | Security | SQL injection, XSS protection |
+
+### Estimated AWS Costs
+
+| Service | Monthly Cost |
+|---------|-------------|
+| EKS (3 nodes) | $450 |
+| RDS (Multi-AZ) | $800 |
+| ElastiCache | $300 |
+| ALB | $50 |
+| CloudFront | $100 |
+| Bedrock (LLM) | $400 |
+| SES | $50 |
+| Other (S3, CW, etc.) | $150 |
+| **Total** | **~$2,300/month** |
+
+### Terraform Structure
+
 ```
-
-### CI/CD Pipeline (GitHub Actions)
-```yaml
-# .github/workflows/deploy.yml
-name: Deploy
-on:
-  push:
-    branches: [main]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-      - run: npm ci
-      - run: npm test
-      - run: npm run lint
-
-  build:
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: docker/build-push-action@v5
-        with:
-          push: true
-          tags: ghcr.io/moodys/okr-tracker:${{ github.sha }}
-
-  deploy-staging:
-    needs: build
-    runs-on: ubuntu-latest
-    environment: staging
-    steps:
-      - uses: azure/k8s-deploy@v4
-        with:
-          manifests: k8s/staging/
-          images: ghcr.io/moodys/okr-tracker:${{ github.sha }}
-
-  deploy-production:
-    needs: deploy-staging
-    runs-on: ubuntu-latest
-    environment: production
-    steps:
-      - uses: azure/k8s-deploy@v4
-        with:
-          manifests: k8s/production/
-          images: ghcr.io/moodys/okr-tracker:${{ github.sha }}
+infrastructure/
+├── terraform/
+│   ├── main.tf
+│   ├── variables.tf
+│   ├── outputs.tf
+│   ├── modules/
+│   │   ├── vpc/
+│   │   ├── eks/
+│   │   ├── rds/
+│   │   ├── elasticache/
+│   │   └── monitoring/
+│   └── environments/
+│       ├── staging/
+│       └── production/
+└── k8s/
+    ├── base/
+    ├── staging/
+    └── production/
 ```
-
-### Infrastructure Requirements
-- **Kubernetes cluster**: 3+ nodes, 8 vCPU / 16GB RAM each
-- **PostgreSQL**: RDS/Cloud SQL, db.r6g.xlarge or equivalent
-- **Redis**: ElastiCache/Memorystore, 2 nodes (primary + replica)
-- **Load balancer**: ALB/nginx ingress
-- **CDN**: CloudFlare or CloudFront for static assets
 
 ---
 
-## Open Questions
+## Resolved Questions
 
-### Authentication
-1. What SSO provider does Moody's use? (Okta, Azure AD, Ping?)
-2. Required claims in SAML assertion? (email, department, employee_id?)
-3. Role mapping from SSO groups?
-
-### Deployment
-4. On-premise or cloud? (AWS, Azure, GCP?)
-5. Existing Kubernetes clusters available?
-6. VPN/network requirements for internal access?
-
-### Data
-7. Import existing OKR data from current system?
-8. Organizational hierarchy data source? (HRIS integration?)
-9. Data retention policy for historical goals?
-
-### Features
-10. Email notifications required? (Weekly summaries, reminders?)
-11. Slack/Teams integration desired?
-12. Mobile app needed or responsive web sufficient?
-13. Offline support requirements?
+| Question | Answer |
+|----------|--------|
+| SSO Provider | **Okta** - OIDC with SCIM provisioning |
+| Deployment | **AWS** - EKS, RDS, ElastiCache |
+| Email notifications | **Yes** - AWS SES with templates |
+| Teams integration | **Yes** - Bot + Tab app + Notifications |
+| Mobile app | **Yes** - React Native (iOS + Android) |
+| LLM integration | **Yes** - AWS Bedrock (Claude) for AI features |
 
 ---
 
 ## Next Steps
 
 1. ✅ Repository created and initial structure committed
-2. ✅ Detailed implementation plan created (this document)
-3. ⏳ **Review and approve this plan**
-4. ⬜ Resolve open questions (SSO, deployment, etc.)
+2. ✅ Detailed implementation plan created
+3. ✅ Plan updated with LLM, mobile, and integrations
+4. ⏳ **Final review and approval**
 5. ⬜ Begin Phase 1 implementation
 6. ⬜ Weekly checkpoint reviews
 
 ---
 
-*Plan created: 2026-01-21*  
+*Plan updated: 2026-01-21*  
 *Ready for review at: https://github.com/berryk/okr-tracker*
