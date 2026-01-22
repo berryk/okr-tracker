@@ -38,8 +38,7 @@ export interface PaginatedResponse<T> extends ApiResponse<T[]> {
 export interface CreateGoalInput {
   title: string;
   description?: string;
-  quarter: string;
-  year: number;
+  year: number;  // Annual objective
   teamId: string;
   isStretch?: boolean;
   dueDate?: string;
@@ -57,6 +56,7 @@ export interface UpdateGoalInput {
 export interface CreateMeasureInput {
   title: string;
   description?: string;
+  quarter: string;  // Quarterly key result (e.g., "Q1-2026")
   measureType: string;
   unit?: string;
   startValue?: number;

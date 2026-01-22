@@ -47,16 +47,10 @@ type GoalWithLinks = Goal & {
   childLinks: Array<{ childGoalId: string; contributionWeight: number }>;
 };
 
-// Generate quarter options
-function getQuarterOptions() {
-  const options: string[] = [];
+// Generate year options
+function getYearOptions() {
   const currentYear = new Date().getFullYear();
-  for (let year = currentYear; year >= currentYear - 1; year--) {
-    for (let q = 4; q >= 1; q--) {
-      options.push(`Q${q}-${year}`);
-    }
-  }
-  return options;
+  return [currentYear + 1, currentYear, currentYear - 1];
 }
 
 interface GoalNodeProps {
@@ -169,10 +163,11 @@ function GoalNode({ goal, childGoals, allGoals, depth = 0, onNavigate }: GoalNod
 
 export default function GoalMap() {
   const navigate = useNavigate();
-  const quarterOptions = getQuarterOptions();
-  const [selectedQuarter, setSelectedQuarter] = useState(quarterOptions[0]);
+  const yearOptions = getYearOptions();
+  const currentYear = new Date().getFullYear();
+  const [selectedYear, setSelectedYear] = useState(currentYear);
 
-  const { data, isLoading } = useGoalsMap(selectedQuarter);
+  const { data, isLoading } = useGoalsMap(selectedYear);
 
   // Organize goals by level and build tree structure
   const { rootGoals, goalsByLevel, allGoalsMap } = useMemo(() => {
@@ -217,13 +212,13 @@ export default function GoalMap() {
       <HStack justify="space-between">
         <Heading size="lg">Goal Alignment Map</Heading>
         <Select
-          value={selectedQuarter}
-          onChange={(e) => setSelectedQuarter(e.target.value)}
+          value={selectedYear}
+          onChange={(e) => setSelectedYear(parseInt(e.target.value))}
           w="150px"
         >
-          {quarterOptions.map((q) => (
-            <option key={q} value={q}>
-              {q}
+          {yearOptions.map((y) => (
+            <option key={y} value={y}>
+              {y}
             </option>
           ))}
         </Select>
@@ -288,7 +283,7 @@ export default function GoalMap() {
         <Card>
           <CardBody textAlign="center" py={8}>
             <Text color="gray.500">
-              No goals found for {selectedQuarter}. Create goals to see them here.
+              No goals found for {selectedYear}. Create goals to see them here.
             </Text>
           </CardBody>
         </Card>

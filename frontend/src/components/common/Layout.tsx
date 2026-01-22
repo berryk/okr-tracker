@@ -24,6 +24,7 @@ const navItems = [
   { label: 'Goals', path: '/goals' },
   { label: 'Goal Map', path: '/goals/map' },
   { label: 'Teams', path: '/teams' },
+  { label: 'Reports', path: '/reports' },
   { label: 'AI Assistant', path: '/ai' },
 ];
 

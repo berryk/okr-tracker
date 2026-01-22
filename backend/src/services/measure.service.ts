@@ -20,6 +20,7 @@ export async function createMeasure(data: CreateMeasureInput, organizationId: st
     data: {
       title: data.title,
       description: data.description,
+      quarter: data.quarter,
       measureType: data.measureType as MeasureType,
       unit: data.unit,
       startValue: data.startValue || 0,

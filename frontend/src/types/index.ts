@@ -36,8 +36,7 @@ export interface Goal {
   id: string;
   title: string;
   description?: string;
-  quarter: string;
-  year: number;
+  year: number;  // Annual objective
   status: GoalStatus;
   progress: number;
   isStretch: boolean;
@@ -88,6 +87,7 @@ export interface Measure {
   id: string;
   title: string;
   description?: string;
+  quarter: string;  // Quarterly key result (e.g., "Q1-2026")
   measureType: 'INCREASE_TO' | 'DECREASE_TO' | 'MAINTAIN' | 'MILESTONE';
   unit?: string;
   startValue: number;

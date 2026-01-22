@@ -129,7 +129,7 @@ export default function GoalDetail() {
             <Badge colorScheme={statusColors[goal.status]} size="lg">
               {goal.status.replace('_', ' ')}
             </Badge>
-            <Badge variant="outline">{goal.quarter}</Badge>
+            <Badge variant="outline">{goal.year}</Badge>
             {goal.isStretch && <Badge colorScheme="purple">Stretch</Badge>}
           </HStack>
         </Box>

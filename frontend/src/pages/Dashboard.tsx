@@ -7,13 +7,11 @@ import {
   StatLabel,
   StatNumber,
   StatHelpText,
-  StatArrow,
   Text,
   VStack,
   HStack,
   Progress,
   Card,
-  CardHeader,
   CardBody,
   Spinner,
   Center,
@@ -22,11 +20,11 @@ import { useGoals } from '../api/goals';
 import { useAuth } from '../context/AuthContext';
 import GoalCard from '../components/goals/GoalCard';
 
-const currentQuarter = `Q${Math.ceil((new Date().getMonth() + 1) / 3)}-${new Date().getFullYear()}`;
+const currentYear = new Date().getFullYear();
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const { data, isLoading } = useGoals({ quarter: currentQuarter, limit: 6 });
+  const { data, isLoading } = useGoals({ year: currentYear, limit: 6 });
 
   if (isLoading) {
     return (
@@ -49,7 +47,7 @@ export default function Dashboard() {
       <Box>
         <Heading size="lg">Welcome back, {user?.firstName}!</Heading>
         <Text color="gray.600" mt={1}>
-          Here's your {currentQuarter} OKR overview
+          Here's your {currentYear} OKR overview
         </Text>
       </Box>
 
@@ -59,7 +57,7 @@ export default function Dashboard() {
             <Stat>
               <StatLabel>Total Goals</StatLabel>
               <StatNumber>{totalGoals}</StatNumber>
-              <StatHelpText>{currentQuarter}</StatHelpText>
+              <StatHelpText>{currentYear}</StatHelpText>
             </Stat>
           </CardBody>
         </Card>
@@ -113,7 +111,7 @@ export default function Dashboard() {
           <Card>
             <CardBody>
               <Text color="gray.500" textAlign="center">
-                No goals found for {currentQuarter}. Create your first goal!
+                No goals found for {currentYear}. Create your first goal!
               </Text>
             </CardBody>
           </Card>

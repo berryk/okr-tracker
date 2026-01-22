@@ -38,9 +38,13 @@ const measureTypeLabels: Record<MeasureType, string> = {
   MILESTONE: 'Milestone (yes/no)',
 };
 
+const currentYear = new Date().getFullYear();
+const currentQuarter = Math.ceil((new Date().getMonth() + 1) / 3);
+
 export default function MeasureForm({ isOpen, onClose, goalId, measure }: MeasureFormProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [quarter, setQuarter] = useState(`Q${currentQuarter}-${currentYear}`);
   const [measureType, setMeasureType] = useState<MeasureType>('INCREASE_TO');
   const [unit, setUnit] = useState('');
   const [startValue, setStartValue] = useState<number>(0);
@@ -55,6 +59,7 @@ export default function MeasureForm({ isOpen, onClose, goalId, measure }: Measur
     if (measure) {
       setTitle(measure.title);
       setDescription(measure.description || '');
+      setQuarter(measure.quarter);
       setMeasureType(measure.measureType);
       setUnit(measure.unit || '');
       setStartValue(measure.startValue);
@@ -62,6 +67,7 @@ export default function MeasureForm({ isOpen, onClose, goalId, measure }: Measur
     } else {
       setTitle('');
       setDescription('');
+      setQuarter(`Q${currentQuarter}-${currentYear}`);
       setMeasureType('INCREASE_TO');
       setUnit('');
       setStartValue(0);
@@ -83,6 +89,7 @@ export default function MeasureForm({ isOpen, onClose, goalId, measure }: Measur
       await createMeasure.mutateAsync({
         title,
         description: description || undefined,
+        quarter,
         measureType,
         unit: unit || undefined,
         startValue,
@@ -97,6 +104,7 @@ export default function MeasureForm({ isOpen, onClose, goalId, measure }: Measur
   const handleClose = () => {
     setTitle('');
     setDescription('');
+    setQuarter(`Q${currentQuarter}-${currentYear}`);
     setMeasureType('INCREASE_TO');
     setUnit('');
     setStartValue(0);
@@ -131,6 +139,27 @@ export default function MeasureForm({ isOpen, onClose, goalId, measure }: Measur
                 rows={2}
               />
             </FormControl>
+
+            {!isEditing && (
+              <FormControl isRequired>
+                <FormLabel>Quarter</FormLabel>
+                <Select
+                  value={quarter}
+                  onChange={(e) => setQuarter(e.target.value)}
+                >
+                  {['Q1', 'Q2', 'Q3', 'Q4'].map((q) =>
+                    [currentYear, currentYear + 1].map((y) => (
+                      <option key={`${q}-${y}`} value={`${q}-${y}`}>
+                        {q} {y}
+                      </option>
+                    ))
+                  )}
+                </Select>
+                <FormHelperText>
+                  Which quarter is this key result for?
+                </FormHelperText>
+              </FormControl>
+            )}
 
             {!isEditing && (
               <FormControl isRequired>

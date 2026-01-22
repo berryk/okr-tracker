@@ -222,7 +222,7 @@ export async function suggestAlignment(
     where: {
       id: { not: goalId },
       team: { organizationId },
-      quarter: goal.quarter,
+      year: goal.year,
       status: { in: ['ACTIVE', 'ON_TRACK', 'AT_RISK', 'DRAFT'] },
     },
     include: { team: { select: { id: true, name: true, level: true } } },

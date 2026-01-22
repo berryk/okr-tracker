@@ -8,8 +8,7 @@ const router = Router();
 const createGoalSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().optional(),
-  quarter: z.string().regex(/^Q[1-4]-\d{4}$/),
-  year: z.number().int().min(2000).max(2100),
+  year: z.number().int().min(2000).max(2100),  // Annual objective
   teamId: z.string().uuid(),
   isStretch: z.boolean().optional(),
   dueDate: z.string().optional(),
@@ -34,15 +33,40 @@ const addUpdateSchema = z.object({
   content: z.string().min(1),
 });
 
+const cloneGoalSchema = z.object({
+  sourceGoalId: z.string().uuid(),
+  targetTeamId: z.string().uuid(),
+  year: z.number().int().min(2000).max(2100),
+  includeMeasures: z.boolean().default(true),
+  newQuarter: z.string().regex(/^Q[1-4]-\d{4}$/).optional(),
+});
+
+const bulkImportSchema = z.object({
+  teamId: z.string().uuid(),
+  year: z.number().int().min(2000).max(2100),
+  quarter: z.string().regex(/^Q[1-4]-\d{4}$/),
+  goals: z.array(z.object({
+    title: z.string().min(1).max(200),
+    description: z.string().optional(),
+    measures: z.array(z.object({
+      title: z.string().min(1).max(200),
+      measureType: z.enum(['INCREASE_TO', 'DECREASE_TO', 'MAINTAIN', 'MILESTONE']),
+      unit: z.string().optional(),
+      startValue: z.number().optional(),
+      targetValue: z.number(),
+    })).optional(),
+  })).min(1),
+});
+
 // List goals
 router.get(
   '/',
   authenticate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { quarter, teamId, ownerId, status, page, limit } = req.query;
+      const { year, teamId, ownerId, status, page, limit } = req.query;
       const result = await goalService.getGoals(req.user!.organizationId, {
-        quarter: quarter as string,
+        year: year ? parseInt(year as string) : undefined,
         teamId: teamId as string,
         ownerId: ownerId as string,
         status: status as any,
@@ -62,12 +86,30 @@ router.get(
   authenticate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { quarter } = req.query;
+      const { year } = req.query;
       const data = await goalService.getGoalsMap(
         req.user!.organizationId,
-        quarter as string | undefined
+        year ? parseInt(year as string) : undefined
       );
       res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Get goals available for cloning (must be before /:id)
+router.get(
+  '/templates/available',
+  authenticate,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { year } = req.query;
+      const goals = await goalService.getGoalsForCloning(
+        req.user!.organizationId,
+        year ? parseInt(year as string) : undefined
+      );
+      res.json({ success: true, data: goals });
     } catch (error) {
       next(error);
     }
@@ -222,6 +264,49 @@ router.get(
         req.user!.organizationId
       );
       res.json({ success: true, data: goals });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Clone a goal
+router.post(
+  '/clone',
+  authenticate,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const data = cloneGoalSchema.parse(req.body);
+      const goal = await goalService.cloneGoal(
+        {
+          ...data,
+          targetOwnerId: req.user!.id,
+        },
+        req.user!.organizationId
+      );
+      res.status(201).json({ success: true, data: goal });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Bulk import goals
+router.post(
+  '/bulk-import',
+  authenticate,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const data = bulkImportSchema.parse(req.body);
+      const goals = await goalService.bulkImportGoals(
+        data.goals,
+        data.teamId,
+        req.user!.id,
+        data.year,
+        data.quarter,
+        req.user!.organizationId
+      );
+      res.status(201).json({ success: true, data: goals, count: goals.length });
     } catch (error) {
       next(error);
     }

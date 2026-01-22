@@ -49,7 +49,7 @@ export default function GoalCard({ goal }: GoalCardProps) {
                   {goal.status.replace('_', ' ')}
                 </Badge>
                 <Badge variant="outline" size="sm">
-                  {goal.quarter}
+                  {goal.year}
                 </Badge>
                 {goal.isStretch && (
                   <Badge colorScheme="purple" size="sm">

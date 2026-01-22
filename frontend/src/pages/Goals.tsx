@@ -17,39 +17,44 @@ import {
   Center,
   Text,
   VStack,
+  Menu,
+  MenuButton,
+  MenuList,
+  MenuItem,
 } from '@chakra-ui/react';
-import { AddIcon } from '@chakra-ui/icons';
+import { AddIcon, ChevronDownIcon, CopyIcon, DownloadIcon } from '@chakra-ui/icons';
 import { useGoals, useCreateGoal } from '../api/goals';
 import { useTeams } from '../api/teams';
 import GoalCard from '../components/goals/GoalCard';
 import GoalForm from '../components/goals/GoalForm';
+import CloneGoalModal from '../components/goals/CloneGoalModal';
+import BulkImportModal from '../components/goals/BulkImportModal';
 
 const currentYear = new Date().getFullYear();
-const quarters = ['Q1', 'Q2', 'Q3', 'Q4'].flatMap((q) =>
-  [currentYear, currentYear + 1].map((y) => `${q}-${y}`)
-);
+const years = [currentYear - 1, currentYear, currentYear + 1];
 
 export default function Goals() {
-  const [selectedQuarter, setSelectedQuarter] = useState(
-    `Q${Math.ceil((new Date().getMonth() + 1) / 3)}-${currentYear}`
-  );
+  const [selectedYear, setSelectedYear] = useState(currentYear);
   const [selectedTeam, setSelectedTeam] = useState('');
 
   const { isOpen, onOpen, onClose } = useDisclosure();
+  const { isOpen: isCloneOpen, onOpen: onCloneOpen, onClose: onCloneClose } = useDisclosure();
+  const { isOpen: isImportOpen, onOpen: onImportOpen, onClose: onImportClose } = useDisclosure();
 
   const { data: goalsData, isLoading: goalsLoading } = useGoals({
-    quarter: selectedQuarter,
+    year: selectedYear,
     teamId: selectedTeam || undefined,
   });
   const { data: teams, isLoading: teamsLoading } = useTeams();
   const createGoal = useCreateGoal();
 
   const handleCreateGoal = async (data: any) => {
-    const [quarter, yearStr] = data.quarter.split('-');
     await createGoal.mutateAsync({
-      ...data,
-      quarter: data.quarter,
-      year: parseInt(yearStr),
+      title: data.title,
+      description: data.description,
+      year: data.year,
+      teamId: data.teamId,
+      isStretch: data.isStretch,
     });
     onClose();
   };
@@ -67,21 +72,36 @@ export default function Goals() {
   return (
     <VStack spacing={6} align="stretch">
       <HStack justify="space-between" wrap="wrap" gap={4}>
-        <Heading size="lg">Goals</Heading>
-        <Button leftIcon={<AddIcon />} colorScheme="blue" onClick={onOpen}>
-          New Goal
-        </Button>
+        <Heading size="lg">Objectives</Heading>
+        <HStack spacing={2}>
+          <Menu>
+            <MenuButton as={Button} rightIcon={<ChevronDownIcon />} variant="outline">
+              More Actions
+            </MenuButton>
+            <MenuList>
+              <MenuItem icon={<CopyIcon />} onClick={onCloneOpen}>
+                Clone from Template
+              </MenuItem>
+              <MenuItem icon={<DownloadIcon />} onClick={onImportOpen}>
+                Bulk Import
+              </MenuItem>
+            </MenuList>
+          </Menu>
+          <Button leftIcon={<AddIcon />} colorScheme="blue" onClick={onOpen}>
+            New Objective
+          </Button>
+        </HStack>
       </HStack>
 
       <HStack spacing={4} wrap="wrap">
         <Select
           w="auto"
-          value={selectedQuarter}
-          onChange={(e) => setSelectedQuarter(e.target.value)}
+          value={selectedYear}
+          onChange={(e) => setSelectedYear(parseInt(e.target.value))}
         >
-          {quarters.map((q) => (
-            <option key={q} value={q}>
-              {q}
+          {years.map((y) => (
+            <option key={y} value={y}>
+              {y}
             </option>
           ))}
         </Select>
@@ -118,7 +138,7 @@ export default function Goals() {
       <Modal isOpen={isOpen} onClose={onClose} size="lg">
         <ModalOverlay />
         <ModalContent>
-          <ModalHeader>Create New Goal</ModalHeader>
+          <ModalHeader>Create New Objective</ModalHeader>
           <ModalCloseButton />
           <ModalBody pb={6}>
             <GoalForm
@@ -129,6 +149,16 @@ export default function Goals() {
           </ModalBody>
         </ModalContent>
       </Modal>
+
+      <CloneGoalModal
+        isOpen={isCloneOpen}
+        onClose={onCloneClose}
+      />
+
+      <BulkImportModal
+        isOpen={isImportOpen}
+        onClose={onImportClose}
+      />
     </VStack>
   );
 }

@@ -5,6 +5,7 @@ import { ApiResponse, Measure, MeasureUpdate } from '../types';
 interface CreateMeasureInput {
   title: string;
   description?: string;
+  quarter: string;  // Quarterly key result (e.g., "Q1-2026")
   measureType: 'INCREASE_TO' | 'DECREASE_TO' | 'MAINTAIN' | 'MILESTONE';
   unit?: string;
   startValue?: number;

@@ -141,16 +141,15 @@ async function main() {
 
   console.log('Created users');
 
-  // Create Goals for Q1-2026
-  const quarter = 'Q1-2026';
+  // Create Goals for 2026 (annual objectives)
   const year = 2026;
+  const q1 = 'Q1-2026';  // For quarterly key results
 
   // Corporate Revenue Goal
   const revenueGoal = await prisma.goal.create({
     data: {
       title: 'Grow Revenue 25% Year-over-Year',
       description: 'Increase annual recurring revenue from $80M to $100M ARR through new customer acquisition and expansion',
-      quarter,
       year,
       status: 'ACTIVE',
       progress: 68,
@@ -164,7 +163,6 @@ async function main() {
     data: {
       title: 'Close $50M in New Annual Contract Value',
       description: 'Drive new business through enterprise and mid-market sales',
-      quarter,
       year,
       status: 'ON_TRACK',
       progress: 72,
@@ -178,7 +176,6 @@ async function main() {
     data: {
       title: 'Close 10 Enterprise Deals >$500K',
       description: 'Land major enterprise accounts with ACV over $500K',
-      quarter,
       year,
       status: 'AT_RISK',
       progress: 40,
@@ -192,7 +189,6 @@ async function main() {
     data: {
       title: 'Launch Platform v2.0 with AI Features',
       description: 'Deliver next-generation platform with AI-powered capabilities',
-      quarter,
       year,
       status: 'ACTIVE',
       progress: 55,
@@ -206,7 +202,6 @@ async function main() {
     data: {
       title: 'Deliver Core Platform Features On Schedule',
       description: 'Complete all planned features for v2.0 release',
-      quarter,
       year,
       status: 'ON_TRACK',
       progress: 65,
@@ -220,7 +215,6 @@ async function main() {
     data: {
       title: 'Implement AI Integration Service',
       description: 'Build the backend service for AI model integration',
-      quarter,
       year,
       status: 'ON_TRACK',
       progress: 70,
@@ -231,12 +225,13 @@ async function main() {
 
   console.log('Created goals');
 
-  // Create Measures
+  // Create Measures (quarterly key results)
   await prisma.measure.createMany({
     data: [
       // Revenue goal measures
       {
         title: 'Annual Recurring Revenue (ARR)',
+        quarter: q1,
         measureType: 'INCREASE_TO',
         unit: '$M',
         startValue: 80,
@@ -247,6 +242,7 @@ async function main() {
       },
       {
         title: 'Net Revenue Retention (NRR)',
+        quarter: q1,
         measureType: 'MAINTAIN',
         unit: '%',
         startValue: 115,
@@ -258,6 +254,7 @@ async function main() {
       // Sales goal measures
       {
         title: 'New ACV Closed',
+        quarter: q1,
         measureType: 'INCREASE_TO',
         unit: '$M',
         startValue: 0,
@@ -268,6 +265,7 @@ async function main() {
       },
       {
         title: 'Win Rate',
+        quarter: q1,
         measureType: 'INCREASE_TO',
         unit: '%',
         startValue: 25,
@@ -279,6 +277,7 @@ async function main() {
       // Enterprise goal measures
       {
         title: 'Enterprise Deals Closed',
+        quarter: q1,
         measureType: 'INCREASE_TO',
         unit: 'deals',
         startValue: 0,
@@ -290,6 +289,7 @@ async function main() {
       // Engineering goal measures
       {
         title: 'Sprint Velocity',
+        quarter: q1,
         measureType: 'MAINTAIN',
         unit: 'points',
         startValue: 40,
@@ -300,6 +300,7 @@ async function main() {
       },
       {
         title: 'Code Coverage',
+        quarter: q1,
         measureType: 'MAINTAIN',
         unit: '%',
         startValue: 75,
@@ -311,6 +312,7 @@ async function main() {
       // Dev goal measures
       {
         title: 'API Endpoints Completed',
+        quarter: q1,
         measureType: 'INCREASE_TO',
         unit: 'endpoints',
         startValue: 0,
@@ -321,6 +323,7 @@ async function main() {
       },
       {
         title: 'API Response Latency',
+        quarter: q1,
         measureType: 'DECREASE_TO',
         unit: 'ms',
         startValue: 500,

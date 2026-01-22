@@ -18,7 +18,6 @@ import { Team } from '../../types';
 interface GoalFormData {
   title: string;
   description: string;
-  quarter: string;
   year: number;
   teamId: string;
   isStretch: boolean;
@@ -32,7 +31,6 @@ interface GoalFormProps {
 }
 
 const currentYear = new Date().getFullYear();
-const quarters = ['Q1', 'Q2', 'Q3', 'Q4'];
 
 export default function GoalForm({ teams, onSubmit, isLoading, defaultValues }: GoalFormProps) {
   const {
@@ -41,7 +39,6 @@ export default function GoalForm({ teams, onSubmit, isLoading, defaultValues }: 
     formState: { errors },
   } = useForm<GoalFormData>({
     defaultValues: {
-      quarter: `Q1-${currentYear}`,
       year: currentYear,
       isStretch: false,
       ...defaultValues,
@@ -71,15 +68,13 @@ export default function GoalForm({ teams, onSubmit, isLoading, defaultValues }: 
 
         <HStack spacing={4}>
           <FormControl isRequired flex={1}>
-            <FormLabel>Quarter</FormLabel>
-            <Select {...register('quarter', { required: true })}>
-              {quarters.map((q) =>
-                [currentYear, currentYear + 1].map((y) => (
-                  <option key={`${q}-${y}`} value={`${q}-${y}`}>
-                    {q} {y}
-                  </option>
-                ))
-              )}
+            <FormLabel>Year</FormLabel>
+            <Select {...register('year', { required: true, valueAsNumber: true })}>
+              {[currentYear - 1, currentYear, currentYear + 1].map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
             </Select>
           </FormControl>
 

@@ -8,6 +8,7 @@ const router = Router();
 const createMeasureSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().optional(),
+  quarter: z.string().regex(/^Q[1-4]-\d{4}$/),  // Quarterly key result
   measureType: z.enum(['INCREASE_TO', 'DECREASE_TO', 'MAINTAIN', 'MILESTONE']),
   unit: z.string().optional(),
   startValue: z.number().optional(),

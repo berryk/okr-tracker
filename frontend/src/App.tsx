@@ -14,6 +14,7 @@ import GoalDetail from './pages/GoalDetail';
 import GoalMap from './pages/GoalMap';
 import Teams from './pages/Teams';
 import AIAssistant from './pages/AIAssistant';
+import Reports from './pages/Reports';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -45,6 +46,7 @@ function App() {
                 <Route path="goals/map" element={<GoalMap />} />
                 <Route path="goals/:id" element={<GoalDetail />} />
                 <Route path="teams" element={<Teams />} />
+                <Route path="reports" element={<Reports />} />
                 <Route path="ai" element={<AIAssistant />} />
               </Route>
             </Routes>

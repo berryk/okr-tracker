@@ -6,7 +6,7 @@ import { GoalStatus } from '@prisma/client';
 export async function getGoals(
   organizationId: string,
   options: {
-    quarter?: string;
+    year?: number;
     teamId?: string;
     ownerId?: string;
     status?: GoalStatus;
@@ -14,11 +14,11 @@ export async function getGoals(
     limit?: number;
   }
 ) {
-  const { quarter, teamId, ownerId, status, page = 1, limit = 20 } = options;
+  const { year, teamId, ownerId, status, page = 1, limit = 20 } = options;
 
   const where = {
     team: { organizationId },
-    ...(quarter && { quarter }),
+    ...(year && { year }),
     ...(teamId && { teamId }),
     ...(ownerId && { ownerId }),
     ...(status && { status }),
@@ -123,7 +123,6 @@ export async function createGoal(data: CreateGoalInput, ownerId: string) {
     data: {
       title: data.title,
       description: data.description,
-      quarter: data.quarter,
       year: data.year,
       teamId: data.teamId,
       ownerId,
@@ -410,17 +409,17 @@ async function getDescendants(
   }
 }
 
-export async function getGoalsMap(organizationId: string, quarter?: string) {
+export async function getGoalsMap(organizationId: string, year?: number) {
   // Get all goals with their links for visualization
   const goals = await prisma.goal.findMany({
     where: {
       team: { organizationId },
-      ...(quarter && { quarter }),
+      ...(year && { year }),
     },
     include: {
       team: { select: { id: true, name: true, level: true } },
       owner: { select: { id: true, firstName: true, lastName: true, avatarUrl: true } },
-      measures: { select: { id: true, title: true, progress: true } },
+      measures: { select: { id: true, title: true, progress: true, quarter: true } },
       parentLinks: {
         select: {
           parentGoalId: true,
@@ -441,7 +440,7 @@ export async function getGoalsMap(organizationId: string, quarter?: string) {
   const links = await prisma.goalLink.findMany({
     where: {
       parentGoal: { team: { organizationId } },
-      ...(quarter && { parentGoal: { quarter } }),
+      ...(year && { parentGoal: { year } }),
     },
     select: {
       id: true,
@@ -478,7 +477,7 @@ export async function getAvailableParentGoals(goalId: string, organizationId: st
     where: {
       id: { notIn: excludeIds },
       team: { organizationId },
-      quarter: currentGoal.quarter, // Same quarter
+      year: currentGoal.year, // Same year
     },
     include: {
       team: { select: { id: true, name: true, level: true } },
@@ -488,4 +487,186 @@ export async function getAvailableParentGoals(goalId: string, organizationId: st
   });
 
   return goals;
+}
+
+export interface CloneGoalOptions {
+  sourceGoalId: string;
+  targetTeamId: string;
+  targetOwnerId: string;
+  year: number;
+  includeMeasures: boolean;
+  newQuarter?: string; // For measures, e.g., "Q1-2026"
+}
+
+export async function cloneGoal(options: CloneGoalOptions, organizationId: string) {
+  const { sourceGoalId, targetTeamId, targetOwnerId, year, includeMeasures, newQuarter } = options;
+
+  // Get the source goal with measures
+  const sourceGoal = await prisma.goal.findFirst({
+    where: { id: sourceGoalId, team: { organizationId } },
+    include: { measures: true },
+  });
+
+  if (!sourceGoal) {
+    throw new AppError(404, 'Source goal not found');
+  }
+
+  // Verify target team exists
+  const targetTeam = await prisma.team.findFirst({
+    where: { id: targetTeamId, organizationId },
+  });
+
+  if (!targetTeam) {
+    throw new AppError(404, 'Target team not found');
+  }
+
+  // Create the cloned goal
+  const clonedGoal = await prisma.goal.create({
+    data: {
+      title: sourceGoal.title,
+      description: sourceGoal.description,
+      year,
+      teamId: targetTeamId,
+      ownerId: targetOwnerId,
+      isStretch: sourceGoal.isStretch,
+      status: 'DRAFT',
+      progress: 0,
+    },
+    include: {
+      owner: {
+        select: { id: true, firstName: true, lastName: true },
+      },
+      team: {
+        select: { id: true, name: true, level: true },
+      },
+    },
+  });
+
+  // Clone measures if requested
+  if (includeMeasures && sourceGoal.measures.length > 0) {
+    const measureQuarter = newQuarter || sourceGoal.measures[0]?.quarter || `Q1-${year}`;
+
+    await prisma.measure.createMany({
+      data: sourceGoal.measures.map((m) => ({
+        title: m.title,
+        description: m.description,
+        quarter: measureQuarter,
+        measureType: m.measureType,
+        unit: m.unit,
+        startValue: m.startValue,
+        currentValue: m.startValue, // Reset to start
+        targetValue: m.targetValue,
+        progress: 0,
+        goalId: clonedGoal.id,
+      })),
+    });
+  }
+
+  // Return the full cloned goal with measures
+  return prisma.goal.findUnique({
+    where: { id: clonedGoal.id },
+    include: {
+      owner: {
+        select: { id: true, firstName: true, lastName: true },
+      },
+      team: {
+        select: { id: true, name: true, level: true },
+      },
+      measures: true,
+    },
+  });
+}
+
+export async function getGoalsForCloning(organizationId: string, year?: number) {
+  // Get all goals that can be used as templates for cloning
+  const goals = await prisma.goal.findMany({
+    where: {
+      team: { organizationId },
+      ...(year && { year }),
+    },
+    include: {
+      team: { select: { id: true, name: true, level: true } },
+      owner: { select: { id: true, firstName: true, lastName: true } },
+      measures: { select: { id: true, title: true, measureType: true, unit: true, targetValue: true } },
+    },
+    orderBy: [{ team: { level: 'asc' } }, { title: 'asc' }],
+  });
+
+  return goals;
+}
+
+export interface BulkImportGoal {
+  title: string;
+  description?: string;
+  measures?: Array<{
+    title: string;
+    measureType: string;
+    unit?: string;
+    startValue?: number;
+    targetValue: number;
+  }>;
+}
+
+export async function bulkImportGoals(
+  goals: BulkImportGoal[],
+  teamId: string,
+  ownerId: string,
+  year: number,
+  quarter: string,
+  organizationId: string
+) {
+  // Verify team exists
+  const team = await prisma.team.findFirst({
+    where: { id: teamId, organizationId },
+  });
+
+  if (!team) {
+    throw new AppError(404, 'Team not found');
+  }
+
+  const createdGoals = [];
+
+  for (const goalData of goals) {
+    const goal = await prisma.goal.create({
+      data: {
+        title: goalData.title,
+        description: goalData.description,
+        year,
+        teamId,
+        ownerId,
+        status: 'DRAFT',
+        progress: 0,
+      },
+    });
+
+    // Create measures if provided
+    if (goalData.measures && goalData.measures.length > 0) {
+      await prisma.measure.createMany({
+        data: goalData.measures.map((m) => ({
+          title: m.title,
+          quarter,
+          measureType: m.measureType as any,
+          unit: m.unit,
+          startValue: m.startValue || 0,
+          currentValue: m.startValue || 0,
+          targetValue: m.targetValue,
+          progress: 0,
+          goalId: goal.id,
+        })),
+      });
+    }
+
+    const fullGoal = await prisma.goal.findUnique({
+      where: { id: goal.id },
+      include: {
+        owner: { select: { id: true, firstName: true, lastName: true } },
+        team: { select: { id: true, name: true, level: true } },
+        measures: true,
+      },
+    });
+
+    createdGoals.push(fullGoal);
+  }
+
+  return createdGoals;
 }

@@ -3,7 +3,7 @@ import client from './client';
 import { ApiResponse, Goal } from '../types';
 
 interface GoalsParams {
-  quarter?: string;
+  year?: number;
   teamId?: string;
   ownerId?: string;
   status?: string;
@@ -14,8 +14,7 @@ interface GoalsParams {
 interface CreateGoalInput {
   title: string;
   description?: string;
-  quarter: string;
-  year: number;
+  year: number;  // Annual objective
   teamId: string;
   isStretch?: boolean;
   dueDate?: string;
@@ -217,16 +216,90 @@ export interface GoalMapData {
   }>;
 }
 
-async function fetchGoalsMap(quarter?: string): Promise<GoalMapData> {
-  const params = quarter ? `?quarter=${quarter}` : '';
+async function fetchGoalsMap(year?: number): Promise<GoalMapData> {
+  const params = year ? `?year=${year}` : '';
   const response = await client.get<ApiResponse<GoalMapData>>(`/api/goals/map${params}`);
   if (!response.data.data) throw new Error('Failed to fetch goals map');
   return response.data.data;
 }
 
-export function useGoalsMap(quarter?: string) {
+export function useGoalsMap(year?: number) {
   return useQuery({
-    queryKey: ['goals-map', quarter],
-    queryFn: () => fetchGoalsMap(quarter),
+    queryKey: ['goals-map', year],
+    queryFn: () => fetchGoalsMap(year),
+  });
+}
+
+// Clone functionality
+export interface CloneGoalInput {
+  sourceGoalId: string;
+  targetTeamId: string;
+  year: number;
+  includeMeasures: boolean;
+  newQuarter?: string;
+}
+
+async function fetchGoalsForCloning(year?: number): Promise<Goal[]> {
+  const params = year ? `?year=${year}` : '';
+  const response = await client.get<ApiResponse<Goal[]>>(`/api/goals/templates/available${params}`);
+  return response.data.data || [];
+}
+
+async function cloneGoal(input: CloneGoalInput): Promise<Goal> {
+  const response = await client.post<ApiResponse<Goal>>('/api/goals/clone', input);
+  if (!response.data.data) throw new Error('Failed to clone goal');
+  return response.data.data;
+}
+
+export function useGoalsForCloning(year?: number) {
+  return useQuery({
+    queryKey: ['goals-for-cloning', year],
+    queryFn: () => fetchGoalsForCloning(year),
+  });
+}
+
+export function useCloneGoal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: cloneGoal,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['goals'] });
+    },
+  });
+}
+
+// Bulk import functionality
+export interface BulkImportGoal {
+  title: string;
+  description?: string;
+  measures?: Array<{
+    title: string;
+    measureType: 'INCREASE_TO' | 'DECREASE_TO' | 'MAINTAIN' | 'MILESTONE';
+    unit?: string;
+    startValue?: number;
+    targetValue: number;
+  }>;
+}
+
+export interface BulkImportInput {
+  teamId: string;
+  year: number;
+  quarter: string;
+  goals: BulkImportGoal[];
+}
+
+async function bulkImportGoals(input: BulkImportInput): Promise<Goal[]> {
+  const response = await client.post<ApiResponse<Goal[]> & { count: number }>('/api/goals/bulk-import', input);
+  if (!response.data.data) throw new Error('Failed to import goals');
+  return response.data.data;
+}
+
+export function useBulkImportGoals() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: bulkImportGoals,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['goals'] });
+    },
   });
 }

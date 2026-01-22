@@ -12,6 +12,7 @@ services:
       - "traefik.http.routers.okr.rule=Host(`okr.8landridgeroad.com`)"
       - "traefik.http.routers.okr.entrypoints=web"
       - "traefik.http.services.okr.loadbalancer.server.port=3000"
+      # No OAuth middleware - direct access
     networks:
       - traefik-network
       - internal
