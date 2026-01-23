@@ -23,8 +23,21 @@ Parameters:
 
   AllowedSSHCidr:
     Type: String
-    Default: 0.0.0.0/0
-    Description: CIDR block allowed for SSH access (restrict for security)
+    Default: 10.0.0.0/8
+    Description: CIDR block allowed for SSH access (use corporate VPN range or 10.0.0.0/8)
+
+  DomainName:
+    Type: String
+    Default: ''
+    Description: Domain name for SSL (e.g., okr.yourcompany.com). Leave empty for IP-only access.
+
+  EnableSSL:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Enable automatic SSL via Let's Encrypt (requires valid domain)
 
 Mappings:
   RegionMap:
@@ -48,6 +61,8 @@ Resources:
             Principal:
               Service: ec2.amazonaws.com
             Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
       Policies:
         - PolicyName: BedrockAccess
           PolicyDocument:
@@ -211,3 +226,7 @@ Outputs:
   DemoCredentials:
     Description: Demo login credentials
     Value: 'Email: ceo@demo.com | Password: demo123'
+
+  SSMConnect:
+    Description: Connect via Session Manager (no SSH key needed)
+    Value: !Sub 'aws ssm start-session --target ${EC2Instance} --region ${AWS::Region}'
