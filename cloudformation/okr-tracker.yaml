@@ -1,0 +1,213 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'OKR Tracker - Single instance deployment with Bedrock integration'
+
+Parameters:
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: SSH key pair for EC2 access
+
+  InstanceType:
+    Type: String
+    Default: t3.medium
+    AllowedValues:
+      - t3.small
+      - t3.medium
+      - t3.large
+      - t3.xlarge
+    Description: EC2 instance type
+
+  BedrockModelId:
+    Type: String
+    Default: anthropic.claude-3-5-sonnet-20241022-v2:0
+    Description: Bedrock model ID for Claude
+
+  AllowedSSHCidr:
+    Type: String
+    Default: 0.0.0.0/0
+    Description: CIDR block allowed for SSH access (restrict for security)
+
+Mappings:
+  RegionMap:
+    us-east-1:
+      AMI: ami-0c7217cdde317cfec  # Ubuntu 24.04 - update as needed
+    us-west-2:
+      AMI: ami-03f65b8614a860c29
+    eu-west-1:
+      AMI: ami-0905a3c97561e0b69
+
+Resources:
+  # IAM Role for EC2 with Bedrock access
+  EC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AWS::StackName}-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: BedrockAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                  - bedrock:ListFoundationModels
+                Resource: '*'
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub '${AWS::StackName}-profile'
+      Roles:
+        - !Ref EC2Role
+
+  # Security Group
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub '${AWS::StackName}-sg'
+      GroupDescription: Security group for OKR Tracker
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref AllowedSSHCidr
+          Description: SSH access
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: HTTP access
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: HTTPS access
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-sg'
+
+  # Elastic IP
+  ElasticIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-eip'
+
+  # EC2 Instance
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      SecurityGroupIds:
+        - !Ref SecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 30
+            VolumeType: gp3
+            DeleteOnTermination: true
+      Tags:
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -e
+          exec > >(tee /var/log/user-data.log) 2>&1
+
+          echo "Starting OKR Tracker setup..."
+
+          # Update system
+          apt-get update && apt-get upgrade -y
+
+          # Install Docker
+          curl -fsSL https://get.docker.com | sh
+          usermod -aG docker ubuntu
+
+          # Install Docker Compose
+          apt-get install -y docker-compose-plugin
+
+          # Install tools
+          apt-get install -y git curl wget htop jq
+
+          # Install Node.js 20
+          curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+          apt-get install -y nodejs
+
+          # Install Claude Code CLI
+          npm install -g @anthropic-ai/claude-code
+
+          # Create app directory
+          mkdir -p /opt/okr-tracker
+          chown ubuntu:ubuntu /opt/okr-tracker
+
+          # Clone repository
+          su - ubuntu -c "git clone https://github.com/berryk/okr-tracker.git /opt/okr-tracker"
+
+          # Create .env file
+          cd /opt/okr-tracker
+          JWT_SECRET=$(openssl rand -hex 32)
+
+          cat > .env <<EOF
+          JWT_SECRET=$JWT_SECRET
+          CORS_ORIGIN=http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
+          VITE_API_URL=http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
+          LLM_PROVIDER=bedrock
+          AWS_REGION=${AWS::Region}
+          BEDROCK_MODEL_ID=${BedrockModelId}
+          DB_PASSWORD=okr_password
+          EOF
+
+          chown ubuntu:ubuntu .env
+
+          # Start the application
+          su - ubuntu -c "cd /opt/okr-tracker && docker compose -f docker-compose.aws.yml up -d"
+
+          # Wait for services
+          sleep 30
+
+          # Initialize database
+          su - ubuntu -c "cd /opt/okr-tracker && docker compose -f docker-compose.aws.yml exec -T backend npx prisma db push"
+          su - ubuntu -c "cd /opt/okr-tracker && docker compose -f docker-compose.aws.yml exec -T backend npx prisma db seed"
+
+          echo "OKR Tracker setup complete!"
+
+  # Associate Elastic IP with Instance
+  EIPAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      InstanceId: !Ref EC2Instance
+      EIP: !Ref ElasticIP
+
+Outputs:
+  InstanceId:
+    Description: EC2 Instance ID
+    Value: !Ref EC2Instance
+
+  PublicIP:
+    Description: Elastic IP address
+    Value: !Ref ElasticIP
+
+  WebURL:
+    Description: URL to access OKR Tracker
+    Value: !Sub 'http://${ElasticIP}'
+
+  SSHCommand:
+    Description: SSH command to connect
+    Value: !Sub 'ssh -i ~/.ssh/${KeyName}.pem ubuntu@${ElasticIP}'
+
+  DemoCredentials:
+    Description: Demo login credentials
+    Value: 'Email: ceo@demo.com | Password: demo123'

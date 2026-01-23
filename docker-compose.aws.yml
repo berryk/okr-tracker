@@ -1,0 +1,74 @@
+# Docker Compose for AWS deployment with Bedrock
+# Usage: docker compose -f docker-compose.aws.yml up -d
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    environment:
+      - VITE_API_URL=${VITE_API_URL:-http://localhost}
+    depends_on:
+      - backend
+    ports:
+      - "80:3000"
+    networks:
+      - internal
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      # Database
+      - DATABASE_URL=postgresql://okr:${DB_PASSWORD:-okr_password}@db:5432/okr_tracker
+      - REDIS_URL=redis://redis:6379
+
+      # App Settings
+      - NODE_ENV=production
+      - JWT_SECRET=${JWT_SECRET}
+      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost}
+
+      # LLM Provider - Bedrock
+      - LLM_PROVIDER=bedrock
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - BEDROCK_MODEL_ID=${BEDROCK_MODEL_ID:-anthropic.claude-3-5-sonnet-20241022-v2:0}
+
+      # Optional: If not using instance role
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+    depends_on:
+      - db
+      - redis
+    networks:
+      - internal
+    restart: unless-stopped
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=okr
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-okr_password}
+      - POSTGRES_DB=okr_tracker
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - internal
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    networks:
+      - internal
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  internal:
+    driver: bridge

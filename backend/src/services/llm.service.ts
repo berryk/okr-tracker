@@ -1,4 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
+import {
+  BedrockRuntimeClient,
+  InvokeModelCommand,
+} from '@aws-sdk/client-bedrock-runtime';
 
 // LLM Provider abstraction
 interface LLMProvider {
@@ -11,7 +15,7 @@ interface CompletionOptions {
   systemPrompt?: string;
 }
 
-// Anthropic Claude implementation
+// Anthropic Claude API implementation
 class AnthropicProvider implements LLMProvider {
   private client: Anthropic;
   private model: string;
@@ -41,6 +45,51 @@ class AnthropicProvider implements LLMProvider {
       return content.text;
     }
     throw new Error('Unexpected response type from LLM');
+  }
+}
+
+// AWS Bedrock implementation
+class BedrockProvider implements LLMProvider {
+  private client: BedrockRuntimeClient;
+  private modelId: string;
+
+  constructor() {
+    this.client = new BedrockRuntimeClient({
+      region: process.env.AWS_REGION || 'us-east-1',
+    });
+    // Default to Claude 3.5 Sonnet on Bedrock
+    this.modelId = process.env.BEDROCK_MODEL_ID || 'anthropic.claude-3-5-sonnet-20241022-v2:0';
+  }
+
+  async complete(prompt: string, options: CompletionOptions = {}): Promise<string> {
+    const { maxTokens = 1024, temperature = 0.7, systemPrompt } = options;
+
+    // Bedrock uses the Anthropic Messages API format
+    const requestBody = {
+      anthropic_version: 'bedrock-2023-05-31',
+      max_tokens: maxTokens,
+      temperature,
+      system: systemPrompt || 'You are a helpful OKR coaching assistant.',
+      messages: [
+        { role: 'user', content: prompt }
+      ],
+    };
+
+    const command = new InvokeModelCommand({
+      modelId: this.modelId,
+      contentType: 'application/json',
+      accept: 'application/json',
+      body: JSON.stringify(requestBody),
+    });
+
+    const response = await this.client.send(command);
+    const responseBody = JSON.parse(new TextDecoder().decode(response.body));
+
+    if (responseBody.content && responseBody.content[0]?.type === 'text') {
+      return responseBody.content[0].text;
+    }
+
+    throw new Error('Unexpected response format from Bedrock');
   }
 }
 
@@ -92,16 +141,26 @@ class MockProvider implements LLMProvider {
       return "Progress is on track at 65% completion with 4 weeks remaining. Key wins include strong performance in core metrics. Main risk is timeline pressure on the final deliverable. Recommend focusing resources on critical path items.";
     }
 
-    return "I'm a mock AI assistant. Configure ANTHROPIC_API_KEY for real responses.";
+    return "I'm a mock AI assistant. Configure ANTHROPIC_API_KEY or LLM_PROVIDER=bedrock for real responses.";
   }
 }
 
 // Factory function to get the appropriate provider
 function createProvider(): LLMProvider {
+  const provider = process.env.LLM_PROVIDER?.toLowerCase();
+
+  if (provider === 'bedrock') {
+    console.log('Using AWS Bedrock LLM provider');
+    return new BedrockProvider();
+  }
+
   if (process.env.ANTHROPIC_API_KEY) {
+    console.log('Using Anthropic API LLM provider');
     return new AnthropicProvider();
   }
-  console.warn('ANTHROPIC_API_KEY not set, using mock LLM provider');
+
+  console.warn('No LLM provider configured, using mock provider');
+  console.warn('Set ANTHROPIC_API_KEY or LLM_PROVIDER=bedrock to enable AI features');
   return new MockProvider();
 }
 
