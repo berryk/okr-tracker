@@ -7,21 +7,13 @@ const router = Router();
 
 const loginSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(1),
-});
-
-const registerSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-  firstName: z.string().min(1),
-  lastName: z.string().min(1),
-  organizationId: z.string().uuid(),
+  name: z.string().min(1),
 });
 
 router.post('/login', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { email, password } = loginSchema.parse(req.body);
-    const result = await authService.login(email, password);
+    const { email, name } = loginSchema.parse(req.body);
+    const result = await authService.loginOrCreate(email, name);
     res.json({ success: true, data: result });
   } catch (error) {
     next(error);

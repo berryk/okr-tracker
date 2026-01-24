@@ -41,6 +41,16 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface DraftMeasureInput {
+  title: string;
+  description?: string;
+  measureType: 'INCREASE_TO' | 'DECREASE_TO' | 'MAINTAIN' | 'MILESTONE';
+  unit?: string;
+  startValue: number;
+  targetValue: number;
+  goalId: string;
+}
+
 // API functions
 async function suggestGoal(
   title: string,
@@ -59,6 +69,15 @@ async function suggestGoal(
 async function reviewMeasure(measureId: string): Promise<MeasureReview> {
   const response = await client.post<ApiResponse<MeasureReview>>(
     `/api/ai/review-measure/${measureId}`
+  );
+  if (!response.data.data) throw new Error('Failed to review measure');
+  return response.data.data;
+}
+
+async function reviewDraftMeasure(input: DraftMeasureInput): Promise<MeasureReview> {
+  const response = await client.post<ApiResponse<MeasureReview>>(
+    '/api/ai/review-draft-measure',
+    input
   );
   if (!response.data.data) throw new Error('Failed to review measure');
   return response.data.data;
@@ -103,6 +122,12 @@ export function useSuggestGoal() {
 export function useReviewMeasure() {
   return useMutation({
     mutationFn: (measureId: string) => reviewMeasure(measureId),
+  });
+}
+
+export function useReviewDraftMeasure() {
+  return useMutation({
+    mutationFn: (input: DraftMeasureInput) => reviewDraftMeasure(input),
   });
 }
 

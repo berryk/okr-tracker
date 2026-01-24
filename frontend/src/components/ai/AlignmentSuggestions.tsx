@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   VStack,
@@ -6,11 +6,12 @@ import {
   Text,
   Button,
   Badge,
-  Progress,
   Spinner,
   Center,
+  useToast,
 } from '@chakra-ui/react';
-import { LinkIcon } from '@chakra-ui/icons';
+import { LinkIcon, CheckIcon } from '@chakra-ui/icons';
+import { useQueryClient } from '@tanstack/react-query';
 import { useSuggestAlignment } from '../../api/ai';
 import { useLinkGoals } from '../../api/goals';
 
@@ -25,13 +26,44 @@ export default function AlignmentSuggestions({
 }: AlignmentSuggestionsProps) {
   const { data: suggestions, isLoading, refetch } = useSuggestAlignment(goalId);
   const linkGoals = useLinkGoals();
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [linkingGoalId, setLinkingGoalId] = useState<string | null>(null);
+  const [linkedGoalIds, setLinkedGoalIds] = useState<Set<string>>(new Set());
 
   const handleLink = async (parentGoalId: string) => {
-    await linkGoals.mutateAsync({
-      childGoalId: goalId,
-      parentGoalId,
-    });
-    onLinkSuccess?.();
+    setLinkingGoalId(parentGoalId);
+    try {
+      await linkGoals.mutateAsync({
+        childGoalId: goalId,
+        parentGoalId,
+      });
+
+      // Mark as linked
+      setLinkedGoalIds((prev) => new Set([...prev, parentGoalId]));
+
+      // Show success toast
+      toast({
+        title: 'Goal linked successfully',
+        status: 'success',
+        duration: 2000,
+      });
+
+      // Invalidate related queries
+      queryClient.invalidateQueries({ queryKey: ['goal-hierarchy', goalId] });
+      queryClient.invalidateQueries({ queryKey: ['goal', goalId] });
+
+      onLinkSuccess?.();
+    } catch (error: any) {
+      toast({
+        title: 'Failed to link goal',
+        description: error?.response?.data?.error || 'Please try again',
+        status: 'error',
+        duration: 3000,
+      });
+    } finally {
+      setLinkingGoalId(null);
+    }
   };
 
   if (isLoading) {
@@ -106,16 +138,29 @@ export default function AlignmentSuggestions({
                 {suggestion.explanation}
               </Text>
             </Box>
-            <Button
-              size="sm"
-              leftIcon={<LinkIcon />}
-              colorScheme="purple"
-              variant="outline"
-              onClick={() => handleLink(suggestion.goalId)}
-              isLoading={linkGoals.isPending}
-            >
-              Link
-            </Button>
+            {linkedGoalIds.has(suggestion.goalId) ? (
+              <Button
+                size="sm"
+                leftIcon={<CheckIcon />}
+                colorScheme="green"
+                variant="solid"
+                isDisabled
+              >
+                Linked
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                leftIcon={<LinkIcon />}
+                colorScheme="purple"
+                variant="outline"
+                onClick={() => handleLink(suggestion.goalId)}
+                isLoading={linkingGoalId === suggestion.goalId}
+                isDisabled={linkingGoalId !== null}
+              >
+                Link
+              </Button>
+            )}
           </HStack>
         </Box>
       ))}

@@ -17,7 +17,7 @@ import { useAuth } from '../context/AuthContext';
 
 export default function Login() {
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -33,7 +33,7 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      await login({ email, password });
+      await login({ email, name });
       navigate(from, { replace: true });
     } catch (err: any) {
       setError(err.response?.data?.error || 'Login failed. Please try again.');
@@ -50,7 +50,7 @@ export default function Login() {
             OKR Tracker
           </Heading>
           <Text color="gray.600" mt={2}>
-            Sign in to your account
+            Enter your details to get started
           </Text>
         </Box>
 
@@ -75,12 +75,12 @@ export default function Login() {
               </FormControl>
 
               <FormControl isRequired>
-                <FormLabel>Password</FormLabel>
+                <FormLabel>Your Name</FormLabel>
                 <Input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="John Smith"
                 />
               </FormControl>
 
@@ -90,14 +90,14 @@ export default function Login() {
                 w="full"
                 isLoading={isLoading}
               >
-                Sign In
+                Continue
               </Button>
             </VStack>
           </form>
         </Box>
 
         <Text textAlign="center" fontSize="sm" color="gray.500">
-          Demo credentials: ceo@demo.com / demo123
+          New users will be automatically registered
         </Text>
       </VStack>
     </Container>

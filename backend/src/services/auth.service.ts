@@ -5,34 +5,59 @@ import { config } from '../config';
 import { AppError } from '../middleware/errorHandler';
 import { AuthenticatedUser } from '../types';
 
-export async function login(email: string, password: string) {
-  const user = await prisma.user.findUnique({
+export async function loginOrCreate(email: string, name: string) {
+  // Parse name into first and last
+  const nameParts = name.trim().split(/\s+/);
+  const firstName = nameParts[0];
+  const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
+
+  // Find or create default organization
+  let organization = await prisma.organization.findFirst({
+    where: { slug: 'default' },
+  });
+
+  if (!organization) {
+    organization = await prisma.organization.create({
+      data: {
+        name: 'Default Organization',
+        slug: 'default',
+      },
+    });
+  }
+
+  // Find or create user
+  let user = await prisma.user.findUnique({
     where: { email },
     include: { organization: true },
   });
 
   if (!user) {
-    throw new AppError(401, 'Invalid credentials');
-  }
-
-  if (!user.passwordHash) {
-    throw new AppError(401, 'SSO authentication required');
-  }
-
-  const isValid = await bcrypt.compare(password, user.passwordHash);
-  if (!isValid) {
-    throw new AppError(401, 'Invalid credentials');
+    // Create new user
+    user = await prisma.user.create({
+      data: {
+        email,
+        firstName,
+        lastName,
+        organizationId: organization.id,
+      },
+      include: { organization: true },
+    });
+  } else {
+    // Update name if changed and update last login
+    user = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        firstName,
+        lastName,
+        lastLoginAt: new Date(),
+      },
+      include: { organization: true },
+    });
   }
 
   if (!user.isActive) {
     throw new AppError(401, 'Account is disabled');
   }
-
-  // Update last login
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { lastLoginAt: new Date() },
-  });
 
   const tokenPayload: AuthenticatedUser = {
     id: user.id,

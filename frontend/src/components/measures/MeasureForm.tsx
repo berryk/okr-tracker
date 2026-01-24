@@ -18,9 +18,22 @@ import {
   VStack,
   HStack,
   FormHelperText,
+  Box,
+  Badge,
+  Progress,
+  Text,
+  Collapse,
+  Divider,
+  List,
+  ListItem,
+  ListIcon,
+  Tooltip,
+  Icon,
 } from '@chakra-ui/react';
+import { CheckCircleIcon, WarningIcon, InfoIcon } from '@chakra-ui/icons';
 import { Measure } from '../../types';
 import { useCreateMeasure, useUpdateMeasure } from '../../api/measures';
+import { useReviewDraftMeasure, MeasureReview } from '../../api/ai';
 
 interface MeasureFormProps {
   isOpen: boolean;
@@ -52,6 +65,9 @@ export default function MeasureForm({ isOpen, onClose, goalId, measure }: Measur
 
   const createMeasure = useCreateMeasure();
   const updateMeasure = useUpdateMeasure(goalId);
+  const reviewDraftMeasure = useReviewDraftMeasure();
+  const [review, setReview] = useState<MeasureReview | null>(null);
+  const [showReview, setShowReview] = useState(false);
 
   const isEditing = !!measure;
 
@@ -109,7 +125,26 @@ export default function MeasureForm({ isOpen, onClose, goalId, measure }: Measur
     setUnit('');
     setStartValue(0);
     setTargetValue(100);
+    setReview(null);
+    setShowReview(false);
     onClose();
+  };
+
+  const handleSmartCheck = async () => {
+    if (!title.trim()) return;
+
+    const result = await reviewDraftMeasure.mutateAsync({
+      title,
+      description: description || undefined,
+      measureType,
+      unit: unit || undefined,
+      startValue,
+      targetValue,
+      goalId,
+    });
+
+    setReview(result);
+    setShowReview(true);
   };
 
   return (
@@ -224,6 +259,131 @@ export default function MeasureForm({ isOpen, onClose, goalId, measure }: Measur
               <FormHelperText>
                 For milestones, progress will be 0% until completed, then 100%.
               </FormHelperText>
+            )}
+
+            {/* SMART Check Section */}
+            {!isEditing && (
+              <>
+                <Divider />
+                <Box w="100%">
+                  <HStack justify="space-between" mb={2}>
+                    <Text fontWeight="medium" fontSize="sm">SMART Check</Text>
+                    <Button
+                      size="sm"
+                      colorScheme="purple"
+                      variant="outline"
+                      onClick={handleSmartCheck}
+                      isLoading={reviewDraftMeasure.isPending}
+                      isDisabled={!title.trim()}
+                    >
+                      Check SMART
+                    </Button>
+                  </HStack>
+
+                  <Collapse in={showReview && !!review} animateOpacity>
+                    {review && (
+                      <Box
+                        p={4}
+                        bg="purple.50"
+                        borderRadius="md"
+                        borderWidth={1}
+                        borderColor="purple.200"
+                      >
+                        <VStack spacing={3} align="stretch">
+                          {/* Overall Score */}
+                          <HStack justify="space-between">
+                            <Text fontWeight="semibold" fontSize="sm">
+                              Overall SMART Score
+                            </Text>
+                            <Badge
+                              colorScheme={review.score >= 8 ? 'green' : review.score >= 6 ? 'yellow' : 'red'}
+                              fontSize="sm"
+                            >
+                              {review.score}/10
+                            </Badge>
+                          </HStack>
+
+                          {/* SMART Criteria */}
+                          <Box>
+                            {Object.entries({
+                              Specific: review.assessment.specific,
+                              Measurable: review.assessment.measurable,
+                              Achievable: review.assessment.achievable,
+                              Relevant: review.assessment.relevant,
+                              'Time-bound': review.assessment.timeBound,
+                            }).map(([label, { score, note }]) => (
+                              <HStack key={label} justify="space-between" py={1}>
+                                <Tooltip label={note} placement="top">
+                                  <HStack cursor="help">
+                                    <Text fontSize="sm" fontWeight="medium">
+                                      {label}
+                                    </Text>
+                                    <Icon as={InfoIcon} boxSize={3} color="gray.400" />
+                                  </HStack>
+                                </Tooltip>
+                                <HStack>
+                                  <Progress
+                                    value={score * 10}
+                                    size="sm"
+                                    w="60px"
+                                    colorScheme={score >= 8 ? 'green' : score >= 6 ? 'yellow' : 'red'}
+                                    borderRadius="full"
+                                  />
+                                  <Text fontSize="sm" w="30px" textAlign="right">
+                                    {score}/10
+                                  </Text>
+                                </HStack>
+                              </HStack>
+                            ))}
+                          </Box>
+
+                          {/* Suggestions */}
+                          {review.suggestions.length > 0 && (
+                            <Box>
+                              <Text fontSize="xs" fontWeight="semibold" color="gray.600" mb={1}>
+                                Suggestions
+                              </Text>
+                              <List spacing={1}>
+                                {review.suggestions.map((suggestion, i) => (
+                                  <ListItem key={i} fontSize="xs" display="flex" alignItems="flex-start">
+                                    <ListIcon as={CheckCircleIcon} color="green.500" mt={0.5} />
+                                    {suggestion}
+                                  </ListItem>
+                                ))}
+                              </List>
+                            </Box>
+                          )}
+
+                          {/* Risks */}
+                          {review.risks.length > 0 && (
+                            <Box>
+                              <Text fontSize="xs" fontWeight="semibold" color="gray.600" mb={1}>
+                                Risks
+                              </Text>
+                              <List spacing={1}>
+                                {review.risks.map((risk, i) => (
+                                  <ListItem key={i} fontSize="xs" display="flex" alignItems="flex-start">
+                                    <ListIcon as={WarningIcon} color="orange.500" mt={0.5} />
+                                    {risk}
+                                  </ListItem>
+                                ))}
+                              </List>
+                            </Box>
+                          )}
+
+                          <Button
+                            size="xs"
+                            variant="ghost"
+                            onClick={() => setShowReview(false)}
+                          >
+                            Hide
+                          </Button>
+                        </VStack>
+                      </Box>
+                    )}
+                  </Collapse>
+                </Box>
+              </>
             )}
           </VStack>
         </ModalBody>

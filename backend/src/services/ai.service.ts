@@ -201,6 +201,96 @@ Respond in JSON format:
   }
 }
 
+// Draft Measure Review (before saving)
+interface DraftMeasureInput {
+  title: string;
+  description?: string;
+  measureType: 'INCREASE_TO' | 'DECREASE_TO' | 'MAINTAIN' | 'MILESTONE';
+  unit?: string;
+  startValue: number;
+  targetValue: number;
+  goalId: string;
+}
+
+export async function reviewDraftMeasure(
+  measure: DraftMeasureInput,
+  organizationId: string
+): Promise<MeasureReview> {
+  const llm = getLLMProvider();
+
+  const goal = await prisma.goal.findFirst({
+    where: { id: measure.goalId, team: { organizationId } },
+    select: { title: true, description: true },
+  });
+
+  if (!goal) {
+    throw new AppError(404, 'Goal not found');
+  }
+
+  const prompt = `You are an expert OKR coach reviewing a key result for quality.
+
+Goal: "${goal.title}"
+${goal.description ? `Goal Description: "${goal.description}"` : ''}
+
+Key Result being reviewed:
+- Title: "${measure.title}"
+- Target: ${measure.targetValue} ${measure.unit || ''}
+- Start Value: ${measure.startValue}
+- Type: ${measure.measureType}
+${measure.description ? `- Description: "${measure.description}"` : ''}
+
+Evaluate this key result against SMART criteria:
+- Specific: Is it clear what's being measured?
+- Measurable: Can progress be objectively tracked?
+- Achievable: Is the target realistic?
+- Relevant: Does it actually indicate goal success?
+- Time-bound: Is there a clear deadline?
+
+Also consider:
+- Is this a leading or lagging indicator?
+- Could this metric be gamed?
+- What might this miss?
+
+Respond in JSON format:
+{
+  "score": number (1-10),
+  "assessment": {
+    "specific": { "score": number (1-10), "note": "string" },
+    "measurable": { "score": number (1-10), "note": "string" },
+    "achievable": { "score": number (1-10), "note": "string" },
+    "relevant": { "score": number (1-10), "note": "string" },
+    "timeBound": { "score": number (1-10), "note": "string" }
+  },
+  "suggestions": ["string"],
+  "risks": ["string"]
+}`;
+
+  const response = await llm.complete(prompt, {
+    maxTokens: 1024,
+    temperature: 0.5,
+    systemPrompt: 'You are an expert OKR coach. Always respond with valid JSON.',
+  });
+
+  try {
+    const jsonMatch = response.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('No JSON found in response');
+    return JSON.parse(jsonMatch[0]);
+  } catch {
+    return {
+      score: 5,
+      assessment: {
+        specific: { score: 5, note: 'Unable to assess' },
+        measurable: { score: 5, note: 'Unable to assess' },
+        achievable: { score: 5, note: 'Unable to assess' },
+        relevant: { score: 5, note: 'Unable to assess' },
+        timeBound: { score: 5, note: 'Unable to assess' },
+      },
+      suggestions: ['Unable to generate suggestions at this time.'],
+      risks: [],
+    };
+  }
+}
+
 // Alignment Suggestions
 export async function suggestAlignment(
   goalId: string,

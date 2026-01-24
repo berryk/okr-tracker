@@ -33,6 +33,7 @@ import AlignmentLadder from '../components/goals/AlignmentLadder';
 import LinkGoalModal from '../components/goals/LinkGoalModal';
 import MeasureForm from '../components/measures/MeasureForm';
 import MeasureProgressModal from '../components/measures/MeasureProgressModal';
+import MeasureHistoryModal from '../components/measures/MeasureHistoryModal';
 import { useDeleteMeasure } from '../api/measures';
 import ProgressSummary from '../components/ai/ProgressSummary';
 import MeasureReviewPanel from '../components/ai/MeasureReviewPanel';
@@ -60,6 +61,7 @@ export default function GoalDetail() {
   const { isOpen: isLinkOpen, onOpen: onLinkOpen, onClose: onLinkClose } = useDisclosure();
   const { isOpen: isMeasureFormOpen, onOpen: onMeasureFormOpen, onClose: onMeasureFormClose } = useDisclosure();
   const { isOpen: isProgressOpen, onOpen: onProgressOpen, onClose: onProgressClose } = useDisclosure();
+  const { isOpen: isHistoryOpen, onOpen: onHistoryOpen, onClose: onHistoryClose } = useDisclosure();
 
   const handleEditMeasure = (measure: Measure) => {
     setSelectedMeasure(measure);
@@ -69,6 +71,16 @@ export default function GoalDetail() {
   const handleUpdateProgress = (measure: Measure) => {
     setSelectedMeasure(measure);
     onProgressOpen();
+  };
+
+  const handleViewHistory = (measure: Measure) => {
+    setSelectedMeasure(measure);
+    onHistoryOpen();
+  };
+
+  const handleHistoryClose = () => {
+    setSelectedMeasure(null);
+    onHistoryClose();
   };
 
   const handleDeleteMeasure = async (measure: Measure) => {
@@ -234,6 +246,9 @@ export default function GoalDetail() {
                               <MenuItem onClick={() => handleUpdateProgress(measure)}>
                                 Update Progress
                               </MenuItem>
+                              <MenuItem onClick={() => handleViewHistory(measure)}>
+                                View History
+                              </MenuItem>
                               <MenuItem onClick={() => handleEditMeasure(measure)}>
                                 Edit Details
                               </MenuItem>
@@ -325,7 +340,7 @@ export default function GoalDetail() {
               <Divider />
 
               {/* AI Alignment Suggestions */}
-              <AlignmentSuggestions goalId={id!} onLinkSuccess={onLinkClose} />
+              <AlignmentSuggestions goalId={id!} />
             </VStack>
           </CardBody>
         </Card>
@@ -412,6 +427,15 @@ export default function GoalDetail() {
           onClose={handleProgressClose}
           measure={selectedMeasure}
           goalId={id!}
+        />
+      )}
+
+      {/* Measure History Modal */}
+      {selectedMeasure && (
+        <MeasureHistoryModal
+          isOpen={isHistoryOpen}
+          onClose={handleHistoryClose}
+          measure={selectedMeasure}
         />
       )}
     </VStack>
