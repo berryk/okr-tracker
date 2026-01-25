@@ -36,11 +36,9 @@ interface BulkImportModalProps {
 
 export default function BulkImportModal({ isOpen, onClose, onSuccess }: BulkImportModalProps) {
   const currentYear = new Date().getFullYear();
-  const currentQuarter = Math.ceil((new Date().getMonth() + 1) / 3);
 
   const [teamId, setTeamId] = useState('');
   const [year, setYear] = useState(currentYear);
-  const [quarter, setQuarter] = useState(`Q${currentQuarter}-${currentYear}`);
   const [rawInput, setRawInput] = useState('');
   const [parseError, setParseError] = useState<string | null>(null);
   const [parsedGoals, setParsedGoals] = useState<BulkImportGoal[]>([]);
@@ -136,7 +134,6 @@ export default function BulkImportModal({ isOpen, onClose, onSuccess }: BulkImpo
       const goals = await bulkImport.mutateAsync({
         teamId,
         year,
-        quarter,
         goals: parsedGoals,
       });
 
@@ -168,7 +165,6 @@ export default function BulkImportModal({ isOpen, onClose, onSuccess }: BulkImpo
   };
 
   const years = [currentYear - 1, currentYear, currentYear + 1];
-  const quarters = ['Q1', 'Q2', 'Q3', 'Q4'].map((q) => `${q}-${year}`);
 
   const exampleFormat = `Increase Revenue by 20%
 - Annual Recurring Revenue, INCREASE_TO, 100, $M
@@ -202,34 +198,17 @@ Launch Mobile App
               </Select>
             </FormControl>
 
-            <Box display="flex" gap={4}>
-              <FormControl flex={1}>
-                <FormLabel>Year</FormLabel>
-                <Select
-                  value={year}
-                  onChange={(e) => {
-                    setYear(parseInt(e.target.value));
-                    setQuarter(`Q${currentQuarter}-${e.target.value}`);
-                  }}
-                >
-                  {years.map((y) => (
-                    <option key={y} value={y}>{y}</option>
-                  ))}
-                </Select>
-              </FormControl>
-
-              <FormControl flex={1}>
-                <FormLabel>Quarter (for Key Results)</FormLabel>
-                <Select
-                  value={quarter}
-                  onChange={(e) => setQuarter(e.target.value)}
-                >
-                  {quarters.map((q) => (
-                    <option key={q} value={q}>{q}</option>
-                  ))}
-                </Select>
-              </FormControl>
-            </Box>
+            <FormControl>
+              <FormLabel>Year</FormLabel>
+              <Select
+                value={year}
+                onChange={(e) => setYear(parseInt(e.target.value))}
+              >
+                {years.map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </Select>
+            </FormControl>
 
             <Accordion allowToggle>
               <AccordionItem border="none">

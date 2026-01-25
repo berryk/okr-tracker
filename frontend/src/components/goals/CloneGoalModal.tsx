@@ -30,14 +30,12 @@ interface CloneGoalModalProps {
 
 export default function CloneGoalModal({ isOpen, onClose, onSuccess }: CloneGoalModalProps) {
   const currentYear = new Date().getFullYear();
-  const currentQuarter = Math.ceil((new Date().getMonth() + 1) / 3);
 
   const [sourceYear, setSourceYear] = useState(currentYear);
   const [sourceGoalId, setSourceGoalId] = useState('');
   const [targetTeamId, setTargetTeamId] = useState('');
   const [targetYear, setTargetYear] = useState(currentYear);
   const [includeMeasures, setIncludeMeasures] = useState(true);
-  const [targetQuarter, setTargetQuarter] = useState(`Q${currentQuarter}-${currentYear}`);
 
   const { data: goals = [], isLoading: goalsLoading } = useGoalsForCloning(sourceYear);
   const { data: teams = [], isLoading: teamsLoading } = useTeams();
@@ -62,7 +60,6 @@ export default function CloneGoalModal({ isOpen, onClose, onSuccess }: CloneGoal
         targetTeamId,
         year: targetYear,
         includeMeasures,
-        newQuarter: includeMeasures ? targetQuarter : undefined,
       });
 
       toast({
@@ -92,7 +89,6 @@ export default function CloneGoalModal({ isOpen, onClose, onSuccess }: CloneGoal
   };
 
   const years = [currentYear - 1, currentYear, currentYear + 1];
-  const quarters = ['Q1', 'Q2', 'Q3', 'Q4'].map((q) => `${q}-${targetYear}`);
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} size="lg">
@@ -166,10 +162,7 @@ export default function CloneGoalModal({ isOpen, onClose, onSuccess }: CloneGoal
               <FormLabel>Target Year</FormLabel>
               <Select
                 value={targetYear}
-                onChange={(e) => {
-                  setTargetYear(parseInt(e.target.value));
-                  setTargetQuarter(`Q${currentQuarter}-${e.target.value}`);
-                }}
+                onChange={(e) => setTargetYear(parseInt(e.target.value))}
               >
                 {years.map((y) => (
                   <option key={y} value={y}>{y}</option>
@@ -184,20 +177,6 @@ export default function CloneGoalModal({ isOpen, onClose, onSuccess }: CloneGoal
                 onChange={(e) => setIncludeMeasures(e.target.checked)}
               />
             </FormControl>
-
-            {includeMeasures && (
-              <FormControl>
-                <FormLabel>Key Results Quarter</FormLabel>
-                <Select
-                  value={targetQuarter}
-                  onChange={(e) => setTargetQuarter(e.target.value)}
-                >
-                  {quarters.map((q) => (
-                    <option key={q} value={q}>{q}</option>
-                  ))}
-                </Select>
-              </FormControl>
-            )}
           </VStack>
         </ModalBody>
 

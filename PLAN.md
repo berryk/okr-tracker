@@ -1149,3 +1149,150 @@ cd backend && npm run db:seed
 - `vp.engineering@demo.com` / `demo123` - Engineering VP
 - `manager@demo.com` / `demo123` - Sales Manager
 - `dev@demo.com` / `demo123` - Developer
+
+---
+
+# Branch Feature Plan: claude/simplify-login-tracking-hh3mq
+
+> **Added**: 2026-01-25
+
+## Overview
+
+Three features to implement:
+1. Admin menu for user/team/goal management
+2. Change key results from quarterly to annual tracking
+3. SMART recommendations with "Apply" button
+
+---
+
+## Feature 1: Admin User Management Menu
+
+### Backend Changes
+
+**1.1 Create `/backend/src/services/user.service.ts`**
+- `getUsers(organizationId)` - List all users
+- `updateUserRole(userId, newRole, organizationId)` - Change role (prevent self-demotion)
+
+**1.2 Create `/backend/src/routes/users.routes.ts`**
+```
+GET    /api/users           - List users (ADMIN only)
+PATCH  /api/users/:id/role  - Update role (ADMIN only)
+```
+
+**1.3 Update `/backend/src/app.ts`**
+- Register users routes
+
+**1.4 Update `/backend/src/routes/goals.routes.ts`**
+- Add `requireRole('ADMIN', 'MANAGER')` to DELETE endpoint
+
+### Frontend Changes
+
+**1.5 Create `/frontend/src/api/users.ts`**
+- API functions and React Query hooks for user management
+
+**1.6 Create `/frontend/src/pages/Admin.tsx`**
+- User list table with: Name, Email, Role, Team, Actions
+- Role change dropdown (ADMIN, EXECUTIVE, MANAGER, CONTRIBUTOR)
+- Only accessible to ADMIN users
+
+**1.7 Update `/frontend/src/components/common/Layout.tsx`**
+- Add "Admin" nav item (conditionally shown for ADMIN role)
+
+**1.8 Update `/frontend/src/App.tsx`**
+- Add route: `<Route path="admin" element={<Admin />} />`
+
+---
+
+## Feature 2: Annual Key Results (instead of Quarterly)
+
+### Database Migration
+
+**2.1 Update `/backend/prisma/schema.prisma`**
+```prisma
+model Measure {
+  // Change from: quarter String
+  // To:
+  year         Int
+
+  // Change index from @@index([quarter]) to:
+  @@index([year])
+}
+```
+
+**2.2 Create migration**
+```bash
+cd backend && npx prisma migrate dev --name quarterly_to_annual
+```
+
+### Backend Changes
+
+**2.3 Update `/backend/src/routes/measures.routes.ts`**
+- Change `quarter: z.string().regex(...)` to `year: z.number().int().min(2020).max(2100)`
+
+**2.4 Update `/backend/src/services/measure.service.ts`**
+- Change `quarter` to `year` in createMeasure
+
+**2.5 Update `/backend/src/types/index.ts`**
+- Change `quarter: string` to `year: number` in CreateMeasureInput
+
+### Frontend Changes
+
+**2.6 Update `/frontend/src/types/index.ts`**
+- Change `quarter: string` to `year: number` in Measure interface
+
+**2.7 Update `/frontend/src/components/measures/MeasureForm.tsx`**
+- Replace quarter selector with year selector
+- Update form submission to use `year`
+
+**2.8 Update `/frontend/src/api/measures.ts`**
+- Update CreateMeasureInput to use `year`
+
+---
+
+## Feature 3: SMART Recommendations with Apply Button
+
+### Backend Changes
+
+**3.1 Update `/backend/src/services/ai.service.ts`**
+
+Extend MeasureReview interface:
+```typescript
+interface MeasureReview {
+  // ... existing fields ...
+  recommendations?: {
+    improvedTitle?: string;
+    improvedDescription?: string;
+    suggestedTargetValue?: number;
+    suggestedUnit?: string;
+    suggestedMeasureType?: string;
+  };
+}
+```
+
+Update `reviewDraftMeasure` prompt to request structured recommendations.
+
+### Frontend Changes
+
+**3.2 Update `/frontend/src/api/ai.ts`**
+- Add `recommendations` field to MeasureReview type
+
+**3.3 Update `/frontend/src/components/measures/MeasureForm.tsx`**
+- Add `handleApplyRecommendations()` function
+- Add "Apply Recommendations" button in review panel
+- Show preview of recommended values
+
+---
+
+## Implementation Order
+
+1. **Feature 2 (Annual)** - Database migration first (breaking change)
+2. **Feature 1 (Admin)** - New additive functionality
+3. **Feature 3 (SMART Apply)** - Enhancement to existing feature
+
+---
+
+## Verification
+
+1. **Admin Menu**: Log in as admin, verify Admin nav appears, change a user's role
+2. **Annual KRs**: Create a new key result, verify year selector (not quarter)
+3. **SMART Apply**: Create KR, click "Check SMART", verify Apply button works

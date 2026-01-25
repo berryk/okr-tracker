@@ -87,7 +87,7 @@ export interface Measure {
   id: string;
   title: string;
   description?: string;
-  quarter: string;  // Quarterly key result (e.g., "Q1-2026")
+  year: number;  // Annual key result (matches Goal.year)
   measureType: 'INCREASE_TO' | 'DECREASE_TO' | 'MAINTAIN' | 'MILESTONE';
   unit?: string;
   startValue: number;

@@ -25,6 +25,13 @@ interface MeasureReview {
   };
   suggestions: string[];
   risks: string[];
+  recommendations?: {
+    improvedTitle?: string;
+    improvedDescription?: string;
+    suggestedTargetValue?: number;
+    suggestedUnit?: string;
+    suggestedMeasureType?: 'INCREASE_TO' | 'DECREASE_TO' | 'MAINTAIN' | 'MILESTONE';
+  };
 }
 
 interface AlignmentSuggestion {
@@ -251,6 +258,8 @@ Also consider:
 - Could this metric be gamed?
 - What might this miss?
 
+IMPORTANT: If the score is less than 8, provide specific recommendations for how to make this key result SMART-compliant. Include improved values the user can apply directly.
+
 Respond in JSON format:
 {
   "score": number (1-10),
@@ -262,7 +271,14 @@ Respond in JSON format:
     "timeBound": { "score": number (1-10), "note": "string" }
   },
   "suggestions": ["string"],
-  "risks": ["string"]
+  "risks": ["string"],
+  "recommendations": {
+    "improvedTitle": "A clearer, more specific version of the title (only if improvement needed)",
+    "improvedDescription": "A better description explaining what success looks like (only if improvement needed)",
+    "suggestedTargetValue": number (only if current target seems off),
+    "suggestedUnit": "A better unit of measurement (only if improvement needed)",
+    "suggestedMeasureType": "INCREASE_TO|DECREASE_TO|MAINTAIN|MILESTONE (only if different type is more appropriate)"
+  }
 }`;
 
   const response = await llm.complete(prompt, {
@@ -287,6 +303,7 @@ Respond in JSON format:
       },
       suggestions: ['Unable to generate suggestions at this time.'],
       risks: [],
+      recommendations: undefined,
     };
   }
 }

@@ -48,7 +48,7 @@ interface AnnualReport {
     totalGoals: number;
     avgProgress: number;
     byStatus: Record<string, number>;
-    byQuarter: Array<{ quarter: string; avgProgress: number; goalCount: number }>;
+    byYear: Array<{ year: number; avgProgress: number; goalCount: number }>;
   };
   teamBreakdown: TeamProgress[];
   highlights: {
@@ -89,7 +89,7 @@ export async function generateQuarterlyReport(
       team: { select: { id: true, name: true, level: true } },
       owner: { select: { firstName: true, lastName: true } },
       measures: {
-        where: { quarter },
+        where: { year },
         select: {
           title: true,
           currentValue: true,
@@ -220,7 +220,7 @@ export async function generateAnnualReport(
       measures: {
         select: {
           title: true,
-          quarter: true,
+          year: true,
           currentValue: true,
           targetValue: true,
           unit: true,
@@ -242,26 +242,26 @@ export async function generateAnnualReport(
     byStatus[g.status] = (byStatus[g.status] || 0) + 1;
   });
 
-  // Calculate progress by quarter based on measures
-  const quarterMap = new Map<string, { total: number; count: number }>();
+  // Calculate progress by year based on measures
+  const yearMap = new Map<number, { total: number; count: number }>();
   goals.forEach((g) => {
     g.measures.forEach((m) => {
-      if (!quarterMap.has(m.quarter)) {
-        quarterMap.set(m.quarter, { total: 0, count: 0 });
+      if (!yearMap.has(m.year)) {
+        yearMap.set(m.year, { total: 0, count: 0 });
       }
-      const q = quarterMap.get(m.quarter)!;
-      q.total += m.progress;
-      q.count++;
+      const y = yearMap.get(m.year)!;
+      y.total += m.progress;
+      y.count++;
     });
   });
 
-  const byQuarter = Array.from(quarterMap.entries())
-    .map(([quarter, data]) => ({
-      quarter,
+  const byYear = Array.from(yearMap.entries())
+    .map(([measureYear, data]) => ({
+      year: measureYear,
       avgProgress: data.count > 0 ? Math.round(data.total / data.count) : 0,
       goalCount: data.count,
     }))
-    .sort((a, b) => a.quarter.localeCompare(b.quarter));
+    .sort((a, b) => a.year - b.year);
 
   // Group by team
   const teamMap = new Map<string, TeamProgress>();
@@ -339,7 +339,7 @@ export async function generateAnnualReport(
       totalGoals,
       avgProgress,
       byStatus,
-      byQuarter,
+      byYear,
     },
     teamBreakdown: Array.from(teamMap.values()).sort((a, b) => {
       const levelOrder: Record<string, number> = { CORPORATE: 0, EXECUTIVE: 1, DEPARTMENT: 2, TEAM: 3, INDIVIDUAL: 4 };
@@ -405,11 +405,11 @@ export function formatReportForPowerPoint(report: QuarterlyReport | AnnualReport
   } else {
     const aReport = report as AnnualReport;
 
-    if (aReport.summary.byQuarter.length > 0) {
-      lines.push('PROGRESS BY QUARTER');
+    if (aReport.summary.byYear.length > 0) {
+      lines.push('PROGRESS BY YEAR');
       lines.push('-'.repeat(40));
-      aReport.summary.byQuarter.forEach((q) => {
-        lines.push(`  ${q.quarter}: ${q.avgProgress}% avg (${q.goalCount} key results)`);
+      aReport.summary.byYear.forEach((y) => {
+        lines.push(`  ${y.year}: ${y.avgProgress}% avg (${y.goalCount} key results)`);
       });
       lines.push('');
     }

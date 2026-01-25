@@ -11,6 +11,7 @@ import measuresRoutes from './routes/measures.routes';
 import teamsRoutes from './routes/teams.routes';
 import aiRoutes from './routes/ai.routes';
 import reportsRoutes from './routes/reports.routes';
+import usersRoutes from './routes/users.routes';
 
 const app = express();
 
@@ -39,6 +40,7 @@ app.use('/api/measures', measuresRoutes);
 app.use('/api/teams', teamsRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/reports', reportsRoutes);
+app.use('/api/users', usersRoutes);
 
 // Error handling
 app.use(notFound);

@@ -10,6 +10,14 @@ const loginSchema = z.object({
   name: z.string().min(1),
 });
 
+const registerSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8),
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  organizationId: z.string().uuid(),
+});
+
 router.post('/login', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { email, name } = loginSchema.parse(req.body);

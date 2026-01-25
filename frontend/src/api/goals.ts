@@ -236,7 +236,6 @@ export interface CloneGoalInput {
   targetTeamId: string;
   year: number;
   includeMeasures: boolean;
-  newQuarter?: string;
 }
 
 async function fetchGoalsForCloning(year?: number): Promise<Goal[]> {
@@ -284,7 +283,6 @@ export interface BulkImportGoal {
 export interface BulkImportInput {
   teamId: string;
   year: number;
-  quarter: string;
   goals: BulkImportGoal[];
 }
 

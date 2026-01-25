@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import * as goalService from '../services/goal.service';
-import { authenticate } from '../middleware/auth';
+import { authenticate, requireRole } from '../middleware/auth';
 
 const router = Router();
 
@@ -38,13 +38,11 @@ const cloneGoalSchema = z.object({
   targetTeamId: z.string().uuid(),
   year: z.number().int().min(2000).max(2100),
   includeMeasures: z.boolean().default(true),
-  newQuarter: z.string().regex(/^Q[1-4]-\d{4}$/).optional(),
 });
 
 const bulkImportSchema = z.object({
   teamId: z.string().uuid(),
   year: z.number().int().min(2000).max(2100),
-  quarter: z.string().regex(/^Q[1-4]-\d{4}$/),
   goals: z.array(z.object({
     title: z.string().min(1).max(200),
     description: z.string().optional(),
@@ -164,10 +162,11 @@ router.patch(
   }
 );
 
-// Delete goal
+// Delete goal (admin/manager only)
 router.delete(
   '/:id',
   authenticate,
+  requireRole('ADMIN', 'MANAGER'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       await goalService.deleteGoal(req.params.id, req.user!.organizationId);
@@ -303,7 +302,6 @@ router.post(
         data.teamId,
         req.user!.id,
         data.year,
-        data.quarter,
         req.user!.organizationId
       );
       res.status(201).json({ success: true, data: goals, count: goals.length });

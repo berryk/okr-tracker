@@ -15,6 +15,7 @@ import GoalMap from './pages/GoalMap';
 import Teams from './pages/Teams';
 import AIAssistant from './pages/AIAssistant';
 import Reports from './pages/Reports';
+import Admin from './pages/Admin';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -48,6 +49,7 @@ function App() {
                 <Route path="teams" element={<Teams />} />
                 <Route path="reports" element={<Reports />} />
                 <Route path="ai" element={<AIAssistant />} />
+                <Route path="admin" element={<Admin />} />
               </Route>
             </Routes>
           </BrowserRouter>
