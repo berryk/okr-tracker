@@ -32,13 +32,14 @@ export async function loginOrCreate(email: string, name: string) {
   });
 
   if (!user) {
-    // Create new user
+    // Create new user with ADMIN role for full access
     user = await prisma.user.create({
       data: {
         email,
         firstName,
         lastName,
         organizationId: organization.id,
+        role: 'ADMIN',
       },
       include: { organization: true },
     });
