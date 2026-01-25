@@ -49,7 +49,7 @@ export interface AnnualReport {
     totalGoals: number;
     avgProgress: number;
     byStatus: Record<string, number>;
-    byQuarter: Array<{ quarter: string; avgProgress: number; goalCount: number }>;
+    byYear: Array<{ year: number; avgProgress: number; goalCount: number }>;
   };
   teamBreakdown: TeamProgress[];
   highlights: {

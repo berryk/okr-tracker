@@ -424,22 +424,22 @@ function AnnualReportView() {
         </Card>
       </SimpleGrid>
 
-      {report.summary.byQuarter.length > 0 && (
+      {report.summary.byYear.length > 0 && (
         <Card>
           <CardHeader>
-            <Heading size="sm">Quarterly Progress</Heading>
+            <Heading size="sm">Progress by Year</Heading>
           </CardHeader>
           <CardBody>
             <SimpleGrid columns={{ base: 2, md: 4 }} spacing={4}>
-              {report.summary.byQuarter.map((q) => (
-                <Box key={q.quarter} textAlign="center">
-                  <Text fontWeight="medium">{q.quarter}</Text>
-                  <Text fontSize="2xl" fontWeight="bold">{q.avgProgress}%</Text>
-                  <Text fontSize="sm" color="gray.500">{q.goalCount} key results</Text>
+              {report.summary.byYear.map((y) => (
+                <Box key={y.year} textAlign="center">
+                  <Text fontWeight="medium">{y.year}</Text>
+                  <Text fontSize="2xl" fontWeight="bold">{y.avgProgress}%</Text>
+                  <Text fontSize="sm" color="gray.500">{y.goalCount} key results</Text>
                   <Progress
-                    value={q.avgProgress}
+                    value={y.avgProgress}
                     size="sm"
-                    colorScheme={q.avgProgress >= 70 ? 'green' : q.avgProgress >= 40 ? 'yellow' : 'red'}
+                    colorScheme={y.avgProgress >= 70 ? 'green' : y.avgProgress >= 40 ? 'yellow' : 'red'}
                     mt={2}
                   />
                 </Box>

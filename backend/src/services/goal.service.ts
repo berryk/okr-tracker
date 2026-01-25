@@ -419,7 +419,7 @@ export async function getGoalsMap(organizationId: string, year?: number) {
     include: {
       team: { select: { id: true, name: true, level: true } },
       owner: { select: { id: true, firstName: true, lastName: true, avatarUrl: true } },
-      measures: { select: { id: true, title: true, progress: true, quarter: true } },
+      measures: { select: { id: true, title: true, progress: true, year: true } },
       parentLinks: {
         select: {
           parentGoalId: true,
@@ -495,11 +495,10 @@ export interface CloneGoalOptions {
   targetOwnerId: string;
   year: number;
   includeMeasures: boolean;
-  newQuarter?: string; // For measures, e.g., "Q1-2026"
 }
 
 export async function cloneGoal(options: CloneGoalOptions, organizationId: string) {
-  const { sourceGoalId, targetTeamId, targetOwnerId, year, includeMeasures, newQuarter } = options;
+  const { sourceGoalId, targetTeamId, targetOwnerId, year, includeMeasures } = options;
 
   // Get the source goal with measures
   const sourceGoal = await prisma.goal.findFirst({
@@ -544,13 +543,11 @@ export async function cloneGoal(options: CloneGoalOptions, organizationId: strin
 
   // Clone measures if requested
   if (includeMeasures && sourceGoal.measures.length > 0) {
-    const measureQuarter = newQuarter || sourceGoal.measures[0]?.quarter || `Q1-${year}`;
-
     await prisma.measure.createMany({
       data: sourceGoal.measures.map((m) => ({
         title: m.title,
         description: m.description,
-        quarter: measureQuarter,
+        year: year,
         measureType: m.measureType,
         unit: m.unit,
         startValue: m.startValue,
@@ -612,7 +609,6 @@ export async function bulkImportGoals(
   teamId: string,
   ownerId: string,
   year: number,
-  quarter: string,
   organizationId: string
 ) {
   // Verify team exists
@@ -644,7 +640,7 @@ export async function bulkImportGoals(
       await prisma.measure.createMany({
         data: goalData.measures.map((m) => ({
           title: m.title,
-          quarter,
+          year,
           measureType: m.measureType as any,
           unit: m.unit,
           startValue: m.startValue || 0,

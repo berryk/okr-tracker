@@ -19,13 +19,18 @@ import { HamburgerIcon, CloseIcon } from '@chakra-ui/icons';
 import { Link, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
-const navItems = [
+const baseNavItems = [
   { label: 'Dashboard', path: '/' },
   { label: 'Goals', path: '/goals' },
   { label: 'Goal Map', path: '/goals/map' },
   { label: 'Teams', path: '/teams' },
   { label: 'Reports', path: '/reports' },
   { label: 'AI Assistant', path: '/ai' },
+];
+
+const adminNavItems = [
+  ...baseNavItems,
+  { label: 'Admin', path: '/admin' },
 ];
 
 function NavLink({ label, path }: { label: string; path: string }) {
@@ -52,6 +57,7 @@ function NavLink({ label, path }: { label: string; path: string }) {
 export default function Layout() {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { user, logout } = useAuth();
+  const navItems = user?.role === 'ADMIN' ? adminNavItems : baseNavItems;
 
   return (
     <Box minH="100vh" bg="gray.50">

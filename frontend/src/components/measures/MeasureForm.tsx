@@ -52,12 +52,11 @@ const measureTypeLabels: Record<MeasureType, string> = {
 };
 
 const currentYear = new Date().getFullYear();
-const currentQuarter = Math.ceil((new Date().getMonth() + 1) / 3);
 
 export default function MeasureForm({ isOpen, onClose, goalId, measure }: MeasureFormProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [quarter, setQuarter] = useState(`Q${currentQuarter}-${currentYear}`);
+  const [year, setYear] = useState(currentYear);
   const [measureType, setMeasureType] = useState<MeasureType>('INCREASE_TO');
   const [unit, setUnit] = useState('');
   const [startValue, setStartValue] = useState<number>(0);
@@ -75,7 +74,7 @@ export default function MeasureForm({ isOpen, onClose, goalId, measure }: Measur
     if (measure) {
       setTitle(measure.title);
       setDescription(measure.description || '');
-      setQuarter(measure.quarter);
+      setYear(measure.year);
       setMeasureType(measure.measureType);
       setUnit(measure.unit || '');
       setStartValue(measure.startValue);
@@ -83,7 +82,7 @@ export default function MeasureForm({ isOpen, onClose, goalId, measure }: Measur
     } else {
       setTitle('');
       setDescription('');
-      setQuarter(`Q${currentQuarter}-${currentYear}`);
+      setYear(currentYear);
       setMeasureType('INCREASE_TO');
       setUnit('');
       setStartValue(0);
@@ -105,7 +104,7 @@ export default function MeasureForm({ isOpen, onClose, goalId, measure }: Measur
       await createMeasure.mutateAsync({
         title,
         description: description || undefined,
-        quarter,
+        year,
         measureType,
         unit: unit || undefined,
         startValue,
@@ -120,7 +119,7 @@ export default function MeasureForm({ isOpen, onClose, goalId, measure }: Measur
   const handleClose = () => {
     setTitle('');
     setDescription('');
-    setQuarter(`Q${currentQuarter}-${currentYear}`);
+    setYear(currentYear);
     setMeasureType('INCREASE_TO');
     setUnit('');
     setStartValue(0);
@@ -146,6 +145,24 @@ export default function MeasureForm({ isOpen, onClose, goalId, measure }: Measur
     setReview(result);
     setShowReview(true);
   };
+
+  const handleApplyRecommendations = () => {
+    if (!review?.recommendations) return;
+    const rec = review.recommendations;
+    if (rec.improvedTitle) setTitle(rec.improvedTitle);
+    if (rec.improvedDescription) setDescription(rec.improvedDescription);
+    if (rec.suggestedTargetValue !== undefined) setTargetValue(rec.suggestedTargetValue);
+    if (rec.suggestedUnit) setUnit(rec.suggestedUnit);
+    if (rec.suggestedMeasureType) setMeasureType(rec.suggestedMeasureType);
+  };
+
+  const hasRecommendations = review?.recommendations && (
+    review.recommendations.improvedTitle ||
+    review.recommendations.improvedDescription ||
+    review.recommendations.suggestedTargetValue !== undefined ||
+    review.recommendations.suggestedUnit ||
+    review.recommendations.suggestedMeasureType
+  );
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} size="lg">
@@ -177,21 +194,19 @@ export default function MeasureForm({ isOpen, onClose, goalId, measure }: Measur
 
             {!isEditing && (
               <FormControl isRequired>
-                <FormLabel>Quarter</FormLabel>
+                <FormLabel>Year</FormLabel>
                 <Select
-                  value={quarter}
-                  onChange={(e) => setQuarter(e.target.value)}
+                  value={year}
+                  onChange={(e) => setYear(Number(e.target.value))}
                 >
-                  {['Q1', 'Q2', 'Q3', 'Q4'].map((q) =>
-                    [currentYear, currentYear + 1].map((y) => (
-                      <option key={`${q}-${y}`} value={`${q}-${y}`}>
-                        {q} {y}
-                      </option>
-                    ))
-                  )}
+                  {[currentYear - 1, currentYear, currentYear + 1, currentYear + 2].map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
                 </Select>
                 <FormHelperText>
-                  Which quarter is this key result for?
+                  Which year is this key result for? Progress can be updated quarterly.
                 </FormHelperText>
               </FormControl>
             )}
@@ -368,6 +383,56 @@ export default function MeasureForm({ isOpen, onClose, goalId, measure }: Measur
                                   </ListItem>
                                 ))}
                               </List>
+                            </Box>
+                          )}
+
+                          {/* AI Recommendations */}
+                          {hasRecommendations && (
+                            <Box bg="white" p={3} borderRadius="md" borderWidth={1} borderColor="purple.300">
+                              <Text fontSize="xs" fontWeight="semibold" color="purple.700" mb={2}>
+                                AI Recommendations
+                              </Text>
+                              <VStack spacing={1} align="stretch" fontSize="xs">
+                                {review.recommendations?.improvedTitle && (
+                                  <HStack>
+                                    <Text color="gray.600" minW="80px">Title:</Text>
+                                    <Text fontWeight="medium">{review.recommendations.improvedTitle}</Text>
+                                  </HStack>
+                                )}
+                                {review.recommendations?.improvedDescription && (
+                                  <HStack>
+                                    <Text color="gray.600" minW="80px">Description:</Text>
+                                    <Text fontWeight="medium">{review.recommendations.improvedDescription}</Text>
+                                  </HStack>
+                                )}
+                                {review.recommendations?.suggestedTargetValue !== undefined && (
+                                  <HStack>
+                                    <Text color="gray.600" minW="80px">Target:</Text>
+                                    <Text fontWeight="medium">{review.recommendations.suggestedTargetValue}</Text>
+                                  </HStack>
+                                )}
+                                {review.recommendations?.suggestedUnit && (
+                                  <HStack>
+                                    <Text color="gray.600" minW="80px">Unit:</Text>
+                                    <Text fontWeight="medium">{review.recommendations.suggestedUnit}</Text>
+                                  </HStack>
+                                )}
+                                {review.recommendations?.suggestedMeasureType && (
+                                  <HStack>
+                                    <Text color="gray.600" minW="80px">Type:</Text>
+                                    <Text fontWeight="medium">{measureTypeLabels[review.recommendations.suggestedMeasureType]}</Text>
+                                  </HStack>
+                                )}
+                              </VStack>
+                              <Button
+                                size="sm"
+                                colorScheme="purple"
+                                mt={3}
+                                w="100%"
+                                onClick={handleApplyRecommendations}
+                              >
+                                Apply Recommendations
+                              </Button>
                             </Box>
                           )}
 

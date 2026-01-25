@@ -167,7 +167,7 @@ model Measure {
   id           String      @id @default(uuid())
   title        String
   description  String?
-  quarter      String      // e.g., "Q1-2026" - Quarterly key result
+  year         Int         // Annual key result (matches Goal.year)
   measureType  MeasureType
   unit         String?     // e.g., "$", "%", "count"
   startValue   Float       @default(0)
@@ -184,7 +184,7 @@ model Measure {
   updates MeasureUpdate[]
 
   @@index([goalId])
-  @@index([quarter])
+  @@index([year])
 }
 
 enum MeasureType {

@@ -56,7 +56,7 @@ export interface UpdateGoalInput {
 export interface CreateMeasureInput {
   title: string;
   description?: string;
-  quarter: string;  // Quarterly key result (e.g., "Q1-2026")
+  year: number;  // Annual key result (matches Goal.year)
   measureType: string;
   unit?: string;
   startValue?: number;

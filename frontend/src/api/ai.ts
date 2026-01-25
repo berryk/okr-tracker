@@ -26,6 +26,13 @@ export interface MeasureReview {
   };
   suggestions: string[];
   risks: string[];
+  recommendations?: {
+    improvedTitle?: string;
+    improvedDescription?: string;
+    suggestedTargetValue?: number;
+    suggestedUnit?: string;
+    suggestedMeasureType?: 'INCREASE_TO' | 'DECREASE_TO' | 'MAINTAIN' | 'MILESTONE';
+  };
 }
 
 export interface AlignmentSuggestion {
