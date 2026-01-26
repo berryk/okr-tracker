@@ -1,11 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'OKR Tracker - Single instance deployment with Bedrock integration and S3 backups'
+Description: 'OKR Tracker - Single instance deployment with ALB, Bedrock integration and S3 backups'
 
 Parameters:
-  KeyName:
-    Type: AWS::EC2::KeyPair::KeyName
-    Description: SSH key pair for EC2 access
-
   InstanceType:
     Type: String
     Default: t3.medium
@@ -20,24 +16,6 @@ Parameters:
     Type: String
     Default: anthropic.claude-3-5-sonnet-20241022-v2:0
     Description: Bedrock model ID for Claude
-
-  AllowedSSHCidr:
-    Type: String
-    Default: 10.0.0.0/8
-    Description: CIDR block allowed for SSH access (use corporate VPN range or 10.0.0.0/8)
-
-  DomainName:
-    Type: String
-    Default: ''
-    Description: Domain name for SSL (e.g., okr.yourcompany.com). Leave empty for IP-only access.
-
-  EnableSSL:
-    Type: String
-    Default: 'true'
-    AllowedValues:
-      - 'true'
-      - 'false'
-    Description: Enable automatic SSL via Let's Encrypt (requires valid domain)
 
   BackupRetentionDays:
     Type: Number
@@ -84,6 +62,18 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub '${AWS::StackName}-backups'
+        - Key: account_env
+          Value: nprd
+        - Key: lob_division
+          Value: ma_cng
+        - Key: application
+          Value: okr-tracker
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: keith.berry@moodys.com
+        - Key: provisioned_by
+          Value: berryk
 
   # ============ IAM ROLE ============
   EC2Role:
@@ -123,6 +113,21 @@ Resources:
                 Resource:
                   - !GetAtt BackupBucket.Arn
                   - !Sub '${BackupBucket.Arn}/*'
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-role'
+        - Key: account_env
+          Value: nprd
+        - Key: lob_division
+          Value: ma_cng
+        - Key: application
+          Value: okr-tracker
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: keith.berry@moodys.com
+        - Key: provisioned_by
+          Value: berryk
 
   EC2InstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -131,18 +136,14 @@ Resources:
       Roles:
         - !Ref EC2Role
 
-  # ============ SECURITY GROUP ============
-  SecurityGroup:
+  # ============ SECURITY GROUPS ============
+  ALBSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupName: !Sub '${AWS::StackName}-sg'
-      GroupDescription: Security group for OKR Tracker
+      GroupName: !Sub '${AWS::StackName}-alb-sg'
+      GroupDescription: Security group for OKR Tracker ALB
+      VpcId: vpc-02d9aa88a126eabe8
       SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          CidrIp: !Ref AllowedSSHCidr
-          Description: SSH access
         - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
@@ -155,16 +156,117 @@ Resources:
           Description: HTTPS access
       Tags:
         - Key: Name
-          Value: !Sub '${AWS::StackName}-sg'
+          Value: !Sub '${AWS::StackName}-alb-sg'
+        - Key: account_env
+          Value: nprd
+        - Key: lob_division
+          Value: ma_cng
+        - Key: application
+          Value: okr-tracker
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: keith.berry@moodys.com
+        - Key: provisioned_by
+          Value: berryk
 
-  # ============ ELASTIC IP ============
-  ElasticIP:
-    Type: AWS::EC2::EIP
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
     Properties:
-      Domain: vpc
+      GroupName: !Sub '${AWS::StackName}-ec2-sg'
+      GroupDescription: Security group for OKR Tracker EC2
+      VpcId: vpc-02d9aa88a126eabe8
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+          Description: HTTP from ALB
       Tags:
         - Key: Name
-          Value: !Sub '${AWS::StackName}-eip'
+          Value: !Sub '${AWS::StackName}-ec2-sg'
+        - Key: account_env
+          Value: nprd
+        - Key: lob_division
+          Value: ma_cng
+        - Key: application
+          Value: okr-tracker
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: keith.berry@moodys.com
+        - Key: provisioned_by
+          Value: berryk
+
+  # ============ APPLICATION LOAD BALANCER ============
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub '${AWS::StackName}-alb'
+      Type: application
+      Scheme: internet-facing
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+      Subnets:
+        - subnet-051da55f78ba09adf  # AVK_FE_TRUST_SN_1A
+        - subnet-06028c9de62b25295  # AVK_FE_TRUST_SN_1B
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-alb'
+        - Key: account_env
+          Value: nprd
+        - Key: lob_division
+          Value: ma_cng
+        - Key: application
+          Value: okr-tracker
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: keith.berry@moodys.com
+        - Key: provisioned_by
+          Value: berryk
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub '${AWS::StackName}-tg'
+      Port: 80
+      Protocol: HTTP
+      VpcId: vpc-02d9aa88a126eabe8
+      TargetType: instance
+      HealthCheckPath: /
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      Targets:
+        - Id: !Ref EC2Instance
+          Port: 80
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-tg'
+        - Key: account_env
+          Value: nprd
+        - Key: lob_division
+          Value: ma_cng
+        - Key: application
+          Value: okr-tracker
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: keith.berry@moodys.com
+        - Key: provisioned_by
+          Value: berryk
+
+  HTTPListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
 
   # ============ EC2 INSTANCE ============
   EC2Instance:
@@ -173,10 +275,10 @@ Resources:
     Properties:
       ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
       InstanceType: !Ref InstanceType
-      KeyName: !Ref KeyName
       IamInstanceProfile: !Ref EC2InstanceProfile
+      SubnetId: subnet-0ce52ca1dd923d890  # AVK_APP_TRUST_SN_1A
       SecurityGroupIds:
-        - !Ref SecurityGroup
+        - !Ref EC2SecurityGroup
       BlockDeviceMappings:
         - DeviceName: /dev/sda1
           Ebs:
@@ -185,7 +287,33 @@ Resources:
             DeleteOnTermination: false
       Tags:
         - Key: Name
-          Value: !Ref 'AWS::StackName'
+          Value: okr-tracker
+        - Key: account_env
+          Value: nprd
+        - Key: lob_division
+          Value: ma_cng
+        - Key: Patch Group
+          Value: linux
+        - Key: patch_level
+          Value: lob_ondemand
+        - Key: provisioned_by
+          Value: berryk
+        - Key: scheduler
+          Value: 24/7
+        - Key: backup
+          Value: none
+        - Key: application
+          Value: okr-tracker
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: keith.berry@moodys.com
+        - Key: revenue
+          Value: n
+        - Key: customer
+          Value: ''
+        - Key: monitoring_strategy
+          Value: ''
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
@@ -215,18 +343,18 @@ Resources:
           mkdir -p /opt/okr-tracker
           chown ubuntu:ubuntu /opt/okr-tracker
 
-          # Clone repository
-          su - ubuntu -c "git clone https://github.com/berryk/okr-tracker.git /opt/okr-tracker"
+          # Clone repository from moodysanalytics
+          su - ubuntu -c "git clone https://github.com/moodysanalytics/okr-tracker.git /opt/okr-tracker"
 
           # Create .env file
           cd /opt/okr-tracker
           JWT_SECRET=$(openssl rand -hex 32)
-          PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
+          ALB_DNS="${ApplicationLoadBalancer.DNSName}"
 
           cat > .env <<EOF
           JWT_SECRET=$JWT_SECRET
-          CORS_ORIGIN=http://$PUBLIC_IP
-          VITE_API_URL=http://$PUBLIC_IP
+          CORS_ORIGIN=http://$ALB_DNS
+          VITE_API_URL=http://$ALB_DNS
           LLM_PROVIDER=bedrock
           AWS_REGION=${AWS::Region}
           BEDROCK_MODEL_ID=${BedrockModelId}
@@ -257,7 +385,6 @@ Resources:
           # Clean up local file
           rm /tmp/$BACKUP_FILE
 
-          # Keep only last 7 daily backups locally described in S3
           echo "[$TIMESTAMP] Backup uploaded to s3://$BUCKET/daily/$BACKUP_FILE"
 
           # Also create a "latest" copy for easy restore
@@ -304,7 +431,6 @@ Resources:
           chown ubuntu:ubuntu /opt/okr-tracker/restore.sh
 
           # ============ CRON JOB FOR DAILY BACKUPS ============
-          # Run backup at 3 AM daily
           echo "0 3 * * * ubuntu /opt/okr-tracker/backup.sh >> /var/log/okr-backup.log 2>&1" > /etc/cron.d/okr-backup
           chmod 644 /etc/cron.d/okr-backup
 
@@ -323,29 +449,18 @@ Resources:
 
           echo "OKR Tracker setup complete with S3 backups enabled!"
 
-  # ============ ELASTIC IP ASSOCIATION ============
-  EIPAssociation:
-    Type: AWS::EC2::EIPAssociation
-    Properties:
-      InstanceId: !Ref EC2Instance
-      EIP: !Ref ElasticIP
-
 Outputs:
   InstanceId:
     Description: EC2 Instance ID
     Value: !Ref EC2Instance
 
-  PublicIP:
-    Description: Elastic IP address
-    Value: !Ref ElasticIP
+  ALBDNSName:
+    Description: ALB DNS Name
+    Value: !GetAtt ApplicationLoadBalancer.DNSName
 
   WebURL:
     Description: URL to access OKR Tracker
-    Value: !Sub 'http://${ElasticIP}'
-
-  SSHCommand:
-    Description: SSH command to connect
-    Value: !Sub 'ssh -i ~/.ssh/${KeyName}.pem ubuntu@${ElasticIP}'
+    Value: !Sub 'http://${ApplicationLoadBalancer.DNSName}'
 
   SSMConnect:
     Description: Connect via Session Manager (no SSH key needed)
