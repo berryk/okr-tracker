@@ -12,6 +12,7 @@ import teamsRoutes from './routes/teams.routes';
 import aiRoutes from './routes/ai.routes';
 import reportsRoutes from './routes/reports.routes';
 import usersRoutes from './routes/users.routes';
+import importRoutes from './routes/import.routes';
 
 const app = express();
 
@@ -41,6 +42,7 @@ app.use('/api/teams', teamsRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/users', usersRoutes);
+app.use('/api/import', importRoutes);
 
 // Error handling
 app.use(notFound);

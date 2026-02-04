@@ -29,6 +29,7 @@ import GoalCard from '../components/goals/GoalCard';
 import GoalForm from '../components/goals/GoalForm';
 import CloneGoalModal from '../components/goals/CloneGoalModal';
 import BulkImportModal from '../components/goals/BulkImportModal';
+import PPTXImportModal from '../components/goals/PPTXImportModal';
 
 const currentYear = new Date().getFullYear();
 const years = [currentYear - 1, currentYear, currentYear + 1];
@@ -40,6 +41,7 @@ export default function Goals() {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { isOpen: isCloneOpen, onOpen: onCloneOpen, onClose: onCloneClose } = useDisclosure();
   const { isOpen: isImportOpen, onOpen: onImportOpen, onClose: onImportClose } = useDisclosure();
+  const { isOpen: isPPTXOpen, onOpen: onPPTXOpen, onClose: onPPTXClose } = useDisclosure();
 
   const { data: goalsData, isLoading: goalsLoading } = useGoals({
     year: selectedYear,
@@ -84,6 +86,9 @@ export default function Goals() {
               </MenuItem>
               <MenuItem icon={<DownloadIcon />} onClick={onImportOpen}>
                 Bulk Import
+              </MenuItem>
+              <MenuItem icon={<DownloadIcon />} onClick={onPPTXOpen}>
+                Import from PowerPoint
               </MenuItem>
             </MenuList>
           </Menu>
@@ -158,6 +163,11 @@ export default function Goals() {
       <BulkImportModal
         isOpen={isImportOpen}
         onClose={onImportClose}
+      />
+
+      <PPTXImportModal
+        isOpen={isPPTXOpen}
+        onClose={onPPTXClose}
       />
     </VStack>
   );
